@@ -1,0 +1,33 @@
+# Flutter / Dart
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.packages
+build/
+coverage/
+*.iml
+.idea/
+.vscode/
+# Local Android tools and signing material
+android/.gradle/
+android/local.properties
+android/key.properties
+*.jks
+*.keystore
+*.hprof
+# User data and backups
+*.db
+*.db-shm
+*.db-wal
+*.db-journal
+*.sqlite
+*.sqlite3
+*.bahaybackup
+*.bahay
+*.brbackup
+before-last-restore.json
+android/.kotlin/
+# Installers are distributed as GitHub Release assets, not source history.
+*.apk
+*.aab
+.DS_Store
