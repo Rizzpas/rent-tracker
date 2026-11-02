@@ -7,11 +7,44 @@ import 'package:bahay_rent/services/backup.dart';
 import 'package:bahay_rent/services/documents.dart';
 import 'package:bahay_rent/services/local_time.dart';
 import 'package:bahay_rent/services/reminders.dart';
+import 'package:flutter/material.dart' hide Row;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+
+  testWidgets(
+    'live preview document actions stop before fonts or native APIs',
+    (tester) async {
+      DocumentService.platformActionsEnabled = false;
+      addTearDown(() => DocumentService.platformActionsEnabled = true);
+      await tester.pumpWidget(
+        MaterialApp(
+          navigatorKey: DocumentService.navigatorKey,
+          home: const Scaffold(body: Text('Preview host')),
+        ),
+      );
+      final data = fixture();
+      // Invalid IDs also prove the preview guard precedes data/PDF generation.
+      for (final action in <Future<void> Function()>[
+        () => DocumentService.statement(data, -1),
+        () => DocumentService.receipt(data, -1),
+        () => DocumentService.report(data, period: '2026-08'),
+        () => DocumentService.exportCsv(data, period: '2026-08'),
+      ]) {
+        await action();
+        await tester.pump();
+        expect(tester.takeException(), isNull);
+        expect(
+          find.text('Available in the Android app. This is a live UI preview.'),
+          findsWidgets,
+        );
+        expect(find.text('Preview host'), findsOneWidget);
+      }
+      await tester.pumpWidget(const SizedBox.shrink());
+    },
+  );
 
   test(
     'timestamps render in Manila even when UTC date is the previous day',

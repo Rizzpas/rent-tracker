@@ -272,6 +272,7 @@ class _BahayAppState extends State<BahayApp> {
             repository: repository,
             onChanged: _refresh,
             period: _period,
+            enablePlatformServices: widget.enablePlatformServices,
           ),
         ];
         return Scaffold(

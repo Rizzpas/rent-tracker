@@ -31,3 +31,5 @@ android/.kotlin/
 *.apk
 *.aab
 .DS_Store
+# Widget Preview related
+.widget_preview/

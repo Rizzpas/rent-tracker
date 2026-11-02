@@ -29,6 +29,8 @@ dev_dependencies:
     sdk: flutter
   flutter_lints: ^6.0.0
   sqflite_common_ffi: ^2.3.6
+  # Development-only browser preview; the Android app continues to use sqflite.
+  sqflite_common_ffi_web: ^1.2.0
 flutter:
   uses-material-design: true
   assets:

@@ -15,12 +15,14 @@ class MorePage extends StatefulWidget {
   final RentalRepository repository;
   final VoidCallback onChanged;
   final String period;
+  final bool enablePlatformServices;
   const MorePage({
     super.key,
     required this.data,
     required this.repository,
     required this.onChanged,
     required this.period,
+    this.enablePlatformServices = true,
   });
   @override
   State<MorePage> createState() => _MorePageState();
@@ -32,8 +34,16 @@ class _MorePageState extends State<MorePage> {
   @override
   void initState() {
     super.initState();
-    _loadSecurity();
-    _loadSafetyCopy();
+    if (widget.enablePlatformServices) {
+      _loadSecurity();
+      _loadSafetyCopy();
+    }
+  }
+
+  bool _allowPlatformAction() {
+    if (widget.enablePlatformServices) return true;
+    _message('Available in the Android app. This is a live UI preview.');
+    return false;
   }
 
   Future<void> _loadSafetyCopy() async {
@@ -120,6 +130,7 @@ class _MorePageState extends State<MorePage> {
   }
 
   Future<void> _backup({bool safetyCopy = false}) async {
+    if (!_allowPlatformAction()) return;
     final mode = await showDialog<String>(
       context: context,
       builder: (dialogContext) => SimpleDialog(
@@ -173,6 +184,7 @@ class _MorePageState extends State<MorePage> {
   }
 
   Future<void> _restore() async {
+    if (!_allowPlatformAction()) return;
     await _run(() async {
       if (!await LockService.confirmIdentity(context) || !mounted) return;
       final restored = await BackupService.importBackup(
@@ -187,6 +199,7 @@ class _MorePageState extends State<MorePage> {
   }
 
   Future<void> _setPin() async {
+    if (!_allowPlatformAction()) return;
     if (!await LockService.confirmIdentity(context) || !mounted) return;
     final pin = TextEditingController();
     final again = TextEditingController();
@@ -228,6 +241,7 @@ class _MorePageState extends State<MorePage> {
   }
 
   Future<void> _disablePin() async {
+    if (!_allowPlatformAction()) return;
     if (!await LockService.confirmIdentity(context) || !mounted) return;
     if (!await confirmAction(
       context,
@@ -245,6 +259,7 @@ class _MorePageState extends State<MorePage> {
   }
 
   Future<void> _toggleReminders(bool enabled) async {
+    if (!_allowPlatformAction()) return;
     await _run(() async {
       if (enabled && !await ReminderService.requestPermission()) {
         throw const FormatException(
@@ -277,7 +292,9 @@ class _MorePageState extends State<MorePage> {
           throw const FormatException('Choose a day from 1 to 28.');
         }
         await widget.repository.saveSettings({'meter_day': '$value'});
-        await ReminderService.reschedule(await widget.repository.load());
+        if (widget.enablePlatformServices) {
+          await ReminderService.reschedule(await widget.repository.load());
+        }
       },
     );
     if (saved) widget.onChanged();
@@ -484,6 +501,7 @@ class _MorePageState extends State<MorePage> {
                 onChanged: _busy
                     ? null
                     : (value) => _run(() async {
+                        if (!_allowPlatformAction()) return;
                         if (!await LockService.confirmIdentity(context)) return;
                         await LockService.setBiometrics(value);
                         await _loadSecurity();

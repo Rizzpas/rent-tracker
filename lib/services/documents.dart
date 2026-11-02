@@ -42,7 +42,27 @@ class ReportData {
 
 class DocumentService {
   static final navigatorKey = GlobalKey<NavigatorState>();
+
+  /// Disabled only by the isolated browser preview entry point.
+  static bool platformActionsEnabled = true;
   static Future<pw.ThemeData>? _fonts;
+
+  static bool _allowPlatformAction() {
+    if (platformActionsEnabled) return true;
+    final context = navigatorKey.currentContext;
+    if (context != null && context.mounted) {
+      final messenger = ScaffoldMessenger.maybeOf(context);
+      messenger?.hideCurrentSnackBar();
+      messenger?.showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Available in the Android app. This is a live UI preview.',
+          ),
+        ),
+      );
+    }
+    return false;
+  }
 
   static Future<pw.ThemeData> _theme() => _fonts ??= () async {
     final regular = await rootBundle.load('assets/fonts/NotoSans-Regular.ttf');
@@ -54,6 +74,7 @@ class DocumentService {
   }();
 
   static Future<void> statement(AppData data, int invoiceId) async {
+    if (!_allowPlatformAction()) return;
     final bill = data.invoice(invoiceId);
     if (bill == null) {
       throw const FormatException('This bill could not be found.');
@@ -66,6 +87,7 @@ class DocumentService {
   }
 
   static Future<void> receipt(AppData data, int paymentId) async {
+    if (!_allowPlatformAction()) return;
     await _preview(
       await receiptBytes(data, paymentId),
       'RCP-${paymentId.toString().padLeft(6, '0')}.pdf',
@@ -80,6 +102,7 @@ class DocumentService {
     int? roomId,
     int? tenantId,
   }) async {
+    if (!_allowPlatformAction()) return;
     final selected = select(
       data,
       period: period,
@@ -309,6 +332,7 @@ class DocumentService {
     int? roomId,
     int? tenantId,
   }) async {
+    if (!_allowPlatformAction()) return;
     final content = csv(
       data,
       period: period,
