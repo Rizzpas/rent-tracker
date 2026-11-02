@@ -112,7 +112,7 @@ class RentalRepository {
     final selectedFactory = factory ?? databaseFactory;
     final dbPath =
         path ??
-        p.join(await selectedFactory.getDatabasesPath(), 'bahay_rent.db');
+        p.join(await selectedFactory.getDatabasesPath(), 'upa_renta.db');
     final db = await selectedFactory.openDatabase(
       dbPath,
       options: OpenDatabaseOptions(
@@ -130,6 +130,9 @@ class RentalRepository {
               'value': entry.value,
             });
           }
+        },
+        onOpen: (db) async {
+          await _ensureIndexes(db);
         },
       ),
     );
@@ -191,8 +194,13 @@ class RentalRepository {
         entity_id INTEGER NOT NULL, detail TEXT NOT NULL, created_at TEXT NOT NULL)''',
       'CREATE TABLE settings (key TEXT PRIMARY KEY, value TEXT NOT NULL)',
       'CREATE INDEX invoice_period ON invoices(period,status)',
+      'CREATE INDEX invoices_due_date ON invoices(status,due_date)',
       'CREATE INDEX payments_date ON payments(date)',
       'CREATE INDEX reading_history ON readings(room_id,kind,period)',
+      'CREATE INDEX allocations_invoice ON allocations(invoice_id)',
+      'CREATE INDEX lines_invoice ON lines(invoice_id)',
+      'CREATE INDEX deposits_tenancy ON deposits(tenancy_id)',
+      'CREATE INDEX tenancies_room ON tenancies(room_id)',
       '''CREATE TRIGGER frozen_invoice_update BEFORE UPDATE ON invoices
         WHEN OLD.status='final' AND (SELECT enabled FROM restore_guard WHERE id=1)=0
         BEGIN SELECT RAISE(ABORT,'Finalized invoices cannot be changed.'); END''',
@@ -235,6 +243,19 @@ class RentalRepository {
       WHEN (SELECT enabled FROM restore_guard WHERE id=1)=0
       BEGIN SELECT RAISE(ABORT,'Payments must be reversed, not deleted.'); END''',
     );
+  }
+
+  static Future<void> _ensureIndexes(DatabaseExecutor db) async {
+    const indexes = [
+      'CREATE INDEX IF NOT EXISTS invoices_due_date ON invoices(status,due_date)',
+      'CREATE INDEX IF NOT EXISTS allocations_invoice ON allocations(invoice_id)',
+      'CREATE INDEX IF NOT EXISTS lines_invoice ON lines(invoice_id)',
+      'CREATE INDEX IF NOT EXISTS deposits_tenancy ON deposits(tenancy_id)',
+      'CREATE INDEX IF NOT EXISTS tenancies_room ON tenancies(room_id)',
+    ];
+    for (final statement in indexes) {
+      await db.execute(statement);
+    }
   }
 
   Future<void> close() => _db.close();
@@ -564,7 +585,7 @@ class RentalRepository {
   Future<int> saveDraft({
     required int tenancyId,
     required String period,
-    required String dueDate,
+    String? dueDate,
     int? electricityCurrent,
     int? waterCurrent,
     int? electricityPrevious,
@@ -575,7 +596,9 @@ class RentalRepository {
     int? waterSharedCents,
   }) async {
     _period(period);
-    _date(dueDate);
+    if (dueDate != null && dueDate.trim().isNotEmpty) {
+      _date(dueDate);
+    }
     _money(adjustmentCents, signed: true);
     final note = _text(adjustmentNote);
     if (adjustmentCents != 0 && note.isEmpty) {
@@ -598,9 +621,16 @@ class RentalRepository {
     }
     return _db.transaction((tx) async {
       final tenancy = await _require(tx, 'tenancies', tenancyId);
+      final resolvedDueDate = (dueDate != null && dueDate.trim().isNotEmpty)
+          ? dueDate
+          : dueDateForPeriod(period, tenancy['due_day'] as int);
+      _date(resolvedDueDate);
       final room = await _require(tx, 'rooms', tenancy['room_id'] as int);
-      final start = DateTime.parse('$period-01');
-      final end = isoDate(DateTime(start.year, start.month + 1, 0));
+      final start = DateTime.utc(
+        int.parse(period.substring(0, 4)),
+        int.parse(period.substring(5, 7)),
+      );
+      final end = isoDate(DateTime.utc(start.year, start.month + 1, 0));
       if ((tenancy['move_in'] as String).compareTo(end) > 0 ||
           (tenancy['move_out'] != null &&
               (tenancy['move_out'] as String).compareTo('$period-01') <= 0)) {
@@ -624,7 +654,7 @@ class RentalRepository {
               'tenancy_id': tenancyId,
               'room_id': room['id'],
               'period': period,
-              'due_date': dueDate,
+              'due_date': resolvedDueDate,
               'status': 'draft',
               'total_cents': 0,
               'reference': 'BILL-${period.replaceAll('-', '')}-R${room['id']}',
@@ -745,7 +775,7 @@ class RentalRepository {
       _money(total);
       await tx.update(
         'invoices',
-        {'due_date': dueDate, 'total_cents': total},
+        {'due_date': resolvedDueDate, 'total_cents': total},
         where: 'id=?',
         whereArgs: [id],
       );
@@ -1021,7 +1051,7 @@ class RentalRepository {
       );
     }
     return {
-      'format': 'bahay-rent-backup',
+      'format': 'upa-renta-backup',
       'version': 1,
       'created_at': _now(),
       'tables': tables,
@@ -1029,13 +1059,13 @@ class RentalRepository {
   });
 
   static Map<String, List<Row>> _decodeBackup(Map<String, dynamic> backup) {
-    if (backup['format'] != 'bahay-rent-backup' ||
+    if (!['upa-renta-backup', 'bahay-rent-backup'].contains(backup['format']) ||
         backup['version'] != 1 ||
         backup['tables'] is! Map ||
         backup['created_at'] is! String ||
         DateTime.tryParse(backup['created_at'] as String) == null) {
       _fail(
-        'This is not a supported Bahay Rent backup. Your current records were not changed.',
+        'This is not a supported Upa Renta backup. Your current records were not changed.',
       );
     }
     final source = backup['tables'] as Map;
@@ -1183,8 +1213,11 @@ class RentalRepository {
       if (tenancy['room_id'] != row['room_id']) {
         _fail('A bill is assigned to the wrong room.');
       }
-      final start = DateTime.parse('${row['period']}-01');
-      final end = isoDate(DateTime(start.year, start.month + 1, 0));
+      final start = DateTime.utc(
+        int.parse((row['period'] as String).substring(0, 4)),
+        int.parse((row['period'] as String).substring(5, 7)),
+      );
+      final end = isoDate(DateTime.utc(start.year, start.month + 1, 0));
       if ((tenancy['move_in'] as String).compareTo(end) > 0 ||
           (tenancy['move_out'] != null &&
               (tenancy['move_out'] as String).compareTo(

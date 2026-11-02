@@ -3,9 +3,9 @@
 import 'dart:io';
 import 'dart:ui' as ui;
 
-import 'package:bahay_rent/app.dart';
-import 'package:bahay_rent/data/models.dart' hide Row;
-import 'package:bahay_rent/data/repository.dart';
+import 'package:upa_renta/app.dart';
+import 'package:upa_renta/data/models.dart' hide Row;
+import 'package:upa_renta/data/repository.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
@@ -46,7 +46,10 @@ void main() {
     await tester.pumpWidget(
       RepaintBoundary(
         key: repaintKey,
-        child: BahayApp(repository: repository!, enablePlatformServices: false),
+        child: UpaRentaApp(
+          repository: repository!,
+          enablePlatformServices: false,
+        ),
       ),
     );
     await tester.runAsync(
@@ -115,10 +118,15 @@ void main() {
     }
 
     await capture('home');
+    await tester.tap(find.byKey(const ValueKey('top-collections-day')));
+    await tester.pumpAndSettle();
+    await capture('collections');
+    await tester.pageBack();
+    await tester.pumpAndSettle();
     await tester.drag(find.byType(ListView).first, const Offset(0, -570));
     await tester.pumpAndSettle();
     await capture('home-details');
-    for (final tab in ['Rooms', 'Billing', 'Payments']) {
+    for (final tab in ['Rooms', 'Billing', 'Payments', 'More']) {
       await tester.tap(find.widgetWithText(NavigationDestination, tab));
       await tester.pumpAndSettle();
       await capture(tab.toLowerCase());

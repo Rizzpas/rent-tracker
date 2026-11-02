@@ -12,11 +12,18 @@ import 'local_time.dart';
 
 String peso(int cents) {
   final value = cents.abs();
-  final whole = (value ~/ 100).toString().replaceAllMapped(
-    RegExp(r'\B(?=(\d{3})+(?!\d))'),
-    (_) => ',',
-  );
-  return '${cents < 0 ? '-' : ''}₱$whole.${(value % 100).toString().padLeft(2, '0')}';
+  final raw = (value ~/ 100).toString();
+  final buffer = StringBuffer();
+  if (cents < 0) buffer.write('-');
+  buffer.write('₱');
+  for (var i = 0; i < raw.length; i++) {
+    if (i > 0 && (raw.length - i) % 3 == 0) buffer.write(',');
+    buffer.write(raw[i]);
+  }
+  buffer
+    ..write('.')
+    ..write((value % 100).toString().padLeft(2, '0'));
+  return buffer.toString();
 }
 
 String _decimal(int cents) =>
@@ -258,10 +265,8 @@ class DocumentService {
       if (payment['reversed_at'] != null || !dateMatches(payment['date'])) {
         continue;
       }
-      for (final allocation in data.allocations.where(
-        (a) => a['payment_id'] == payment['id'],
-      )) {
-        final bill = data.invoice(allocation['invoice_id']);
+      for (final allocation in data.allocationsForPayment(payment['id'] as int)) {
+        final bill = data.invoice(allocation['invoice_id'] as int);
         if (bill != null && tenancyMatches(bill['tenancy_id'])) {
           payments.add({
             ...payment,
@@ -386,8 +391,9 @@ class DocumentService {
       ],
     ];
     for (final b in selected.invoices) {
-      int amount(String kind) => data.lines
-          .where((l) => l['invoice_id'] == b['id'] && l['kind'] == kind)
+      final billLines = data.linesForInvoice(b['id'] as int);
+      int amount(String kind) => billLines
+          .where((l) => l['kind'] == kind)
           .fold<int>(0, (s, l) => s + (l['amount_cents'] as int));
       rows.add([
         'Bill',
@@ -495,9 +501,7 @@ class DocumentService {
       theme: await _theme(),
       title: 'Billing statement ${bill['reference']}',
     );
-    final invoiceLines = data.lines
-        .where((l) => l['invoice_id'] == invoiceId)
-        .toList();
+    final invoiceLines = data.linesForInvoice(invoiceId);
     final previous = data.invoices
         .where(
           (b) =>
@@ -571,8 +575,8 @@ class DocumentService {
           _heading('Meter readings'),
           _table(
             ['Utility', 'Previous', 'Current', 'Consumption'],
-            data.readings
-                .where((r) => r['invoice_id'] == invoiceId)
+            data
+                .readingsForInvoice(invoiceId)
                 .map(
                   (r) => [
                     r['kind'].toString(),
@@ -589,12 +593,8 @@ class DocumentService {
           _heading('Payments on this bill'),
           _table(
             ['Date', 'Receipt', 'Method', 'Amount'],
-            data.allocations.where((a) => a['invoice_id'] == invoiceId).map((
-              a,
-            ) {
-              final p = data.payments.firstWhere(
-                (p) => p['id'] == a['payment_id'],
-              );
+            data.allocationsForInvoice(invoiceId).map((a) {
+              final p = data.payment(a['payment_id'] as int)!;
               return [
                 p['date'].toString(),
                 'RCP-${p['id'].toString().padLeft(6, '0')}${p['reversed_at'] != null ? ' (reversed)' : ''}',
@@ -617,9 +617,7 @@ class DocumentService {
 
   @visibleForTesting
   static Future<Uint8List> receiptBytes(AppData data, int paymentId) async {
-    final payment = data.payments
-        .where((p) => p['id'] == paymentId)
-        .firstOrNull;
+    final payment = data.payment(paymentId);
     if (payment == null) throw const FormatException('Payment not found.');
     final pdf = pw.Document(theme: await _theme(), title: 'Payment receipt');
     final reference = 'RCP-${paymentId.toString().padLeft(6, '0')}';
@@ -654,17 +652,15 @@ class DocumentService {
               'This reversed transaction does not reduce the outstanding balance.',
             ),
           ],
-          for (final allocation in data.allocations.where(
-            (a) => a['payment_id'] == paymentId,
-          )) ...[
+          for (final allocation in data.allocationsForPayment(paymentId)) ...[
             _heading(
-              'Applied to bill ${data.invoice(allocation['invoice_id'])?['reference']}',
+              'Applied to bill ${data.invoice(allocation['invoice_id'] as int)?['reference']}',
             ),
-            ..._billIdentity(data, data.invoice(allocation['invoice_id'])!),
+            ..._billIdentity(data, data.invoice(allocation['invoice_id'] as int)!),
             _table(
               ['Charge', 'Amount'],
-              data.lines
-                  .where((l) => l['invoice_id'] == allocation['invoice_id'])
+              data
+                  .linesForInvoice(allocation['invoice_id'] as int)
                   .map(
                     (l) => [
                       l['description'].toString(),
@@ -789,7 +785,7 @@ class DocumentService {
     mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
     children: [
       pw.Text(
-        'Bahay Rent · Created offline · ${isoDate(manilaNow())}',
+        'Upa Renta · Created offline · ${isoDate(manilaNow())}',
         style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey600),
       ),
       pw.Text(

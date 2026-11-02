@@ -8,7 +8,6 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:path_provider/path_provider.dart';
 
-import '../data/models.dart';
 import '../data/repository.dart';
 import 'local_time.dart';
 
@@ -16,7 +15,8 @@ import 'local_time.dart';
 class BackupService {
   static const maxBytes = 32 * 1024 * 1024;
   static const iterations = 210000;
-  static const _aad = 'bahay-rent-encrypted:1';
+  static const _aad = 'upa-renta-encrypted:1';
+  static const _legacyAad = 'bahay-rent-encrypted:1';
 
   static Future<File> _safetyFile() async {
     final directory = await getApplicationSupportDirectory();
@@ -44,7 +44,7 @@ class BackupService {
     });
     return saveBytes(
       bytes,
-      'Bahay-Rent-before-last-restore.brbackup',
+      'Upa-Renta-before-last-restore.urbackup',
       title: 'Save records from before the last restore',
     );
   }
@@ -61,8 +61,8 @@ class BackupService {
     final now = manilaNow();
     final saved = await saveBytes(
       bytes,
-      'Bahay-Rent-${isoDate(now)}-${now.hour.toString().padLeft(2, '0')}${now.minute.toString().padLeft(2, '0')}.brbackup',
-      title: 'Save your rental backup',
+      'Upa-Renta-${isoDate(now)}-${now.hour.toString().padLeft(2, '0')}${now.minute.toString().padLeft(2, '0')}.urbackup',
+      title: 'Save your Upa Renta backup',
     );
     if (saved) {
       await repository.saveSettings({
@@ -78,7 +78,7 @@ class BackupService {
     String? password,
   }) async {
     final picked = await FilePicker.platform.pickFiles(
-      dialogTitle: 'Choose a Bahay Rent backup',
+      dialogTitle: 'Choose an Upa Renta backup',
       type: FileType.any,
       allowMultiple: false,
       withData: false,
@@ -271,14 +271,14 @@ Map<String, dynamic> _readEnvelope(Uint8List bytes) {
   try {
     final value = jsonDecode(utf8.decode(bytes));
     if (value is! Map<String, dynamic> ||
-        value['format'] != 'bahay-rent-file' ||
+        !['upa-renta-file', 'bahay-rent-file'].contains(value['format']) ||
         value['version'] != 1 ||
         value['encrypted'] is! bool) {
-      throw const FormatException('Not a supported Bahay Rent backup file.');
+      throw const FormatException('Not a supported Upa Renta backup file.');
     }
     return value;
   } on FormatException {
-    throw const FormatException('This is not a valid Bahay Rent backup file.');
+    throw const FormatException('This is not a valid Upa Renta backup file.');
   }
 }
 
@@ -293,7 +293,7 @@ Future<Uint8List> _encodeBackup(Map<String, dynamic> args) async {
   final password = args['password'] as String?;
   final body = utf8.encode(jsonEncode(payload));
   final envelope = <String, dynamic>{
-    'format': 'bahay-rent-file',
+    'format': 'upa-renta-file',
     'version': 1,
     'encrypted': password != null,
   };
@@ -361,6 +361,9 @@ Future<Map<String, dynamic>> _decodeBackup(Map<String, dynamic> args) async {
       throw const FormatException('Invalid encrypted backup.');
     }
     final key = await _backupKey(password, salt);
+    final aad = envelope['format'] == 'bahay-rent-file'
+        ? BackupService._legacyAad
+        : BackupService._aad;
     final body = await AesGcm.with256bits().decrypt(
       SecretBox(
         base64Decode(envelope['ciphertext'] as String),
@@ -368,7 +371,7 @@ Future<Map<String, dynamic>> _decodeBackup(Map<String, dynamic> args) async {
         mac: Mac(mac),
       ),
       secretKey: key,
-      aad: utf8.encode(BackupService._aad),
+      aad: utf8.encode(aad),
     );
     final payload = jsonDecode(utf8.decode(body));
     if (payload is! Map<String, dynamic>) {

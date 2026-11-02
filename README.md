@@ -1,54 +1,50 @@
-# Bahay Rent
+# Upa Renta
 
-A native Flutter Android application for a small Philippine rental property. The app uses SQLite on the phone and does not require an account, server, or internet connection. Currency is Philippine pesos; financial dates and reminder schedules use Asia/Manila.
+**Upa Renta** (`upa_renta`) is an offline-first Flutter Android rental ledger and utility billing application built for small Philippine apartment, boarding-house, and room-rental landlords. It runs smoothly on entry-level Android phones, stores all data locally in SQLite without requiring an online account or internet connection, prices everything in exact Philippine Pesos (`₱` integer centavos), and computes every due date, collection window, and reminder in `Asia/Manila` (`UTC+08:00`).
+
+## Highlights
+
+- **Collections Day (`< 3 taps`)**: Tap **`Collect`** in the top bar from any screen to see everyone due in the next 7 days (plus overdue follow-ups) in `Asia/Manila` time. Tap **`Pay & receipt`** once to record full payment and immediately generate an offline PDF receipt (**2 taps total from launch**), or tap **`Record paid`** followed by **`Receipt`**.
+- **Philippine Due-Date Schedules (`Asia/Manila`)**: Built-in 1-tap presets and calendar math for **`5th`**, **`15th`**, **`30th`**, and **`End of month` (`31`)**—including automatic clamping for **February 28** in common years, **February 29** in leap years, and **30-day months** (April, June, September, November).
+- **Custom Thumb-Friendly Date & Month Pickers**: Fast bottom-sheet `Asia/Manila` calendar and billing-month pickers with 1-tap `Today`, `5th`, `15th`, `30th`, and `End of month` presets, inline month/year jump grids, and clear weekday previews.
+- **Engineered for Low-End Android Phones**: Zero `BackdropFilter` offscreen GPU blurs, single-active-tab widget instantiation, lazy `SliverList.builder` / `ListView.builder` history lists, `O(1)` in-memory relational indexing on `AppData`, SQLite secondary indexes, allocation-free Peso & date formatters, deduplicated/capped Android alarm IPC, and R8 code + resource shrinking.
+- **Reliable Offline Notifications**: High-importance Android notification channel (`upa_renta_reminders`), Android 13+ runtime permission flow, `RECEIVE_BOOT_COMPLETED` alarm restoration with explicit R8 ProGuard keep rules, and a 1-tap **`Send test notification`** verification action in **More**.
+
+![Upa Renta dashboard](deliverables/screenshots/home.png)
+
+Screenshots use isolated demonstration fixtures. Fresh installations start with an empty property ledger.
 
 ## Install
 
-Download the signed Android APK from the [latest GitHub release](https://github.com/Rizzpas/rent-tracker/releases/latest). A local release build also writes it to `deliverables/Bahay-Rent-1.0.0.apk`. Copy the APK to an Android phone running Android 7.0 or newer, open it, and allow installation from the app used to open the file. Keep the same application installed when applying updates; uninstalling removes its private records.
+Download the signed Android APK (`Upa-Renta-1.0.0.apk`) or build it locally into `deliverables/Upa-Renta-1.0.0.apk`. Copy the APK to an Android phone running Android 7.0 (API 24) or newer, open it, and allow installation. Keep the application installed when applying updates; uninstalling removes private app-sandbox records unless backed up externally.
 
-![Bahay Rent dashboard](deliverables/screenshots/home.png)
+## First Use & Daily Workflow
 
-Screenshots use fictional test records. The installed application starts with an empty property.
+1. Open **More**, tap your property name under **Property & preferences**, and enter your property name, address, and owner/landlady name for statements and receipts.
+2. Open **Rooms → Add a room** to configure monthly rent and electricity/water billing modes (`Metered`, `Fixed`, or `Shared`).
+3. Tap **Assign a tenant** on a room, select their due-date schedule (`5th`, `15th`, `30th`, `End of month`, or any day `1–31`), move-in date, agreed rent, and security deposit.
+4. Open **Billing** for the selected month, enter meter readings or shared utility amounts, save a draft, review the breakdown, and **Finalize bill**.
+5. On collection days, tap **`Collect`** in the top bar to open **Collections Day**:
+   - Choose `Cash`, `GCash`, `Bank transfer`, or `Other` (defaults to `Cash`).
+   - Tap **`Pay & receipt`** on a tenant card to record full payment and open the PDF receipt in **1 tap** (2 taps from app launch), or tap **`Partial / custom`** for installment payments.
+6. Enable **Local reminders** in **More** and tap **Send test notification** to confirm notifications appear on your phone.
+7. Save `.urbackup` backups outside the phone regularly via **More → Save backup** (optionally encrypted with a password).
 
-## First use
+## Financial & Ledger Rules
 
-1. Open **More**, tap your property name under **Property & preferences**, and enter your property information.
-2. Open **Rooms → Add room**, enter rent and the electricity/water billing modes and rates.
-3. Assign a tenant to the room, including their agreement, due day, and security deposit.
-4. Select the billing month and open **Billing**. Enter the initial previous/current readings, or the fixed/shared charges. Save a draft, review it, then finalize it.
-5. Open **Payments**, choose an outstanding invoice, and record a payment. Partial and multiple payments are supported. Generate a receipt from the transaction history.
-6. Use **More** for reports, exports, reminders, app lock, and backups. Save a backup outside the app's private storage regularly.
+- **Exact Integer Arithmetic**: Monetary amounts are stored and calculated in integer centavos; meter readings use integer thousandths (`0.001` kWh / m³) with single-pass half-up centavo rounding using `BigInt` overflow guards.
+- **Immutable Finalized Bills**: SQLite triggers lock finalized invoices, line items, and meter readings so later rent or utility rate edits affect future drafts only.
+- **Derived Carry-Forward Balances**: Earlier unpaid balances stay on their original finalized bills and are never double-counted as new charges on later bills.
+- **Separate Security Deposits**: Security deposits are tracked in their own ledger (`received`, `refund`, `deduction` after move-out) and never inflate rent collection totals.
+- **Idempotent & Auditable Payments**: Duplicate taps are deduplicated via unique `request_id` keys. Corrections reverse the original payment with a mandatory reason and audit entry rather than deleting history.
 
-The app starts with no example tenants or transactions. Room and tenant history is retained when someone moves out. Rooms are archived instead of deleting their financial history.
+## Backup & Recovery
 
-## Financial rules
+Export `.urbackup` files via **More → Save backup** to Downloads, USB storage, or another device. Password-protected backups use PBKDF2-HMAC-SHA256 (`210,000` iterations) + authenticated `AES-GCM-256`. Upa Renta validates every relational and financial invariant in an isolated SQLite candidate database before atomic replacement, saves a pre-restore safety copy automatically, and maintains backward restore compatibility with legacy `.brbackup` archives.
 
-- Monetary amounts are integer centavos. Readings are integer thousandths of a unit; usage charges are rounded once to the nearest centavo using integer arithmetic.
-- Rent comes from the tenant's agreement. Fixed utilities use the configured amount; shared utilities accept each room's allocated share. The application does not infer how a property should split a shared master bill.
-- There is one invoice per room per billing month. Rent is not automatically prorated. If a tenant changes mid-month after that room's bill is finalized, the incoming tenant's next invoice starts in the following billing month; settle the outgoing month's agreement before finalizing it.
-- First readings accept an initial baseline. Later finalized periods use the previous finalized meter reading. Invalid readings and conflicting billing periods are rejected.
-- Drafts can be reviewed and edited. Finalized invoice lines preserve their original rates and amounts. New rates affect future drafts only.
-- A previous unpaid balance is a reference to existing invoices, never a second charge. Payments are allocated to individual finalized invoices. A late partial balance remains overdue.
-- Payments received in a month are separate from charges billed for that month. Security deposits are held in their own ledger and are excluded from rent collection.
-- A payment correction reverses the original transaction with a reason and an audit record. Record the correct payment as a new transaction. Original transactions remain visible.
+## Development & Verification
 
-## Backup and recovery
-
-Export a backup through **More**, choose a device folder or removable storage, and optionally protect it with a password. Copy important backups to a second device or storage location. The file contains all rental, tenant, invoice, reading, payment, deposit, audit, and property setting records.
-
-Restore validates the file and its financial relationships before showing a replacement confirmation. Replacement is atomic, and the app keeps a local safety copy of the records being replaced. Invalid files and incorrect passwords leave the current records intact. Restore replaces the current dataset; it does not merge two properties. Keep the password safe: encrypted backup passwords cannot be recovered. PIN/biometric credentials are device-specific and are not exported with property data.
-
-SQLite files are stored in Android's private app sandbox. Automatic Android cloud backup is disabled. The optional app lock protects access through the app; it is not full database encryption. External plaintext backups and exported PDFs/CSVs should be stored appropriately. Password-protected backups use authenticated AES-GCM encryption with a randomly salted PBKDF2 key.
-
-## Offline documents and reminders
-
-PDF statements, receipts, reports, and CSV exports are created locally. Fonts are bundled. PDF viewing and saving work offline; printing depends on an installed Android print service and available printer. Sharing opens Android's share menu; the selected receiving application may need connectivity.
-
-Reminders are local Android notifications. Enable them in More and grant notification permission when asked. Android may delay notifications under battery restrictions. Pending notifications are restored by the Android boot receiver. Reopen the app periodically so it can refresh future schedules and current balances. No SMS, email, or cloud messaging service is used.
-
-## Development
-
-Requirements: Flutter stable (developed with Flutter 3.47.9 / Dart 3.13.7), JDK 17, Android SDK platform/build tools 36, and Android NDK 28.2.13676358. Dependency downloads require internet during development; the installed application does not.
+Requirements: Flutter stable (verified with Flutter 3.47.9 / Dart 3.13.7), JDK 17, and Android SDK 36.
 
 ```powershell
 flutter pub get
@@ -57,22 +53,31 @@ flutter test
 flutter run
 ```
 
-Build the signed APK on Windows:
+Regenerate visual review screenshots:
+
+```powershell
+flutter test test/preview_test.dart --dart-define=EXPORT_PREVIEWS=true
+```
+
+Build the signed, R8-optimized release APK on Windows:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File scripts/build-android.ps1
 ```
 
-Pass `-FlutterSdk`, `-AndroidSdk`, and `-JavaHome` if needed. The script also recognizes the tools provisioned for this project under `%USERPROFILE%\.cache\rent_tracker_tools`. It runs analysis and tests before packaging and writes the APK and SHA-256 checksum to `deliverables`.
+The build script runs `flutter analyze` and `flutter test`, signs the release APK using `%LOCALAPPDATA%\UpaRenta\signing`, and writes `deliverables/Upa-Renta-1.0.0.apk` plus `deliverables/SHA256SUMS.txt`.
 
-The first build creates a private release signing key under `%LOCALAPPDATA%\BahayRent\signing`, with access restricted to the current Windows account. Back up that entire folder securely: the same key is required to install future updates over this APK. `android/key.properties` is local and ignored by version control. Signing passwords and keys must never be committed.
+## Source Layout
 
-Source layout:
+- `lib/main.dart`, `lib/app.dart`: Application entry point, low-overhead shell, custom month switcher, and 1-tap `Collect` header trigger.
+- `lib/data/models.dart`: Exact fixed-point parser and `AppData` `O(1)` indexed ledger snapshot.
+- `lib/data/repository.dart`: Transactional SQLite repository, immutability triggers, indexes, Manila due-date resolution, and backup validation.
+- `lib/services/local_time.dart`: `Asia/Manila` (`UTC+08:00`) clock, leap-year calendar math, `5th`/`15th`/`30th`/`End-of-month` due-date engine, and collection-week helpers.
+- `lib/services/documents.dart`: Offline PDF statements, receipts, summary reports, and formula-safe CSV exports.
+- `lib/services/reminders.dart`: Android local notifications, high-importance channel setup, deduplicated scheduling, and test notifications.
+- `lib/services/backup.dart`: Checksummed plaintext and `AES-GCM-256` encrypted `.urbackup` export/import.
+- `lib/services/app_lock.dart`: Salted `PBKDF2` 6-digit PIN & biometric app lock with 30-second background relock.
+- `lib/ui/`: `common.dart`, `date_picker.dart`, `collections_page.dart`, `home_page.dart`, `rooms_page.dart`, `billing_page.dart`, `payments_page.dart`, and `more_page.dart`.
+- `test/`: Comprehensive unit, widget, financial-integrity, and 360px/1.3× accessibility layout tests for every module.
 
-- `lib/data`: SQLite repository, exact numeric parsing, and financial data helpers.
-- `lib/ui`: dashboard, rooms and tenancies, billing, payments, and management screens.
-- `lib/services`: documents, backup encryption, local app lock, and reminders.
-- `test`: financial integrity, persistence, restoration, document, security, and UI tests.
-- `docs/QA.md`: verification results and remaining device checks.
-
-Bundled Noto Sans fonts are licensed under the SIL Open Font License; see `assets/fonts/OFL.txt`.
+Bundled Noto Sans fonts are licensed under the SIL Open Font License (`assets/fonts/OFL.txt`).

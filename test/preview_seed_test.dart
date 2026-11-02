@@ -1,5 +1,5 @@
-import 'package:bahay_rent/data/models.dart';
-import 'package:bahay_rent/data/repository.dart';
+import 'package:upa_renta/data/models.dart';
+import 'package:upa_renta/data/repository.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 

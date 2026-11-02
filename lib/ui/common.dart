@@ -1,34 +1,37 @@
 import 'package:flutter/material.dart';
-import 'package:intl/intl.dart';
 import '../data/models.dart' hide Row;
 import '../data/models.dart' as model show Row;
+import '../services/documents.dart' show peso;
+import '../services/local_time.dart';
 
-const ink = Color(0xFF163D35);
-const sage = Color(0xFFDAE8D9);
-const warm = Color(0xFFF6F5F0);
-const muted = Color(0xFF64736B);
-const amber = Color(0xFF9B641A);
-const danger = Color(0xFFB74437);
+export 'date_picker.dart';
 
-String money(int cents) => NumberFormat.currency(
-  locale: 'en_PH',
-  symbol: '₱',
-  decimalDigits: 2,
-).format(cents / 100);
+const ink = Color(0xFF14453B);
+const inkDeep = Color(0xFF0C2E27);
+const gold = Color(0xFFF5B841);
+const sage = Color(0xFFDCEBE0);
+const warm = Color(0xFFF5F6F2);
+const muted = Color(0xFF5C6D64);
+const amber = Color(0xFF9E6314);
+const danger = Color(0xFFB83E31);
+
+/// Exact, allocation-light Philippine Peso formatter for integer centavos.
+String money(int cents) => peso(cents);
+
 String decimalOf(int value, [int places = 2]) {
   final negative = value < 0 ? '-' : '';
   final digits = value.abs().toString().padLeft(places + 1, '0');
   return '$negative${digits.substring(0, digits.length - places)}.${digits.substring(digits.length - places)}';
 }
 
-String monthLabel(String period) =>
-    DateFormat('MMMM yyyy').format(DateTime.parse('$period-01'));
-String dateLabel(String value) =>
-    DateFormat('d MMM yyyy').format(DateTime.parse(value));
+String monthLabel(String period) => formatPeriodLabel(period);
+String dateLabel(String value) => formatIsoDateLabel(value);
+
 String friendlyError(Object error) => error.toString().replaceFirst(
   RegExp(r'^(Exception|FormatException|StateError|Bad state):\s*'),
   '',
 );
+
 String requiredText(TextEditingController field, String label) {
   final value = field.text.trim();
   if (value.isEmpty) throw FormatException('Please enter $label.');
@@ -37,14 +40,108 @@ String requiredText(TextEditingController field, String label) {
 
 String invoiceStatus(AppData data, model.Row invoice) {
   if (invoice['status'] == 'draft') return 'Draft';
-  final remaining = data.balance(invoice['id']);
+  final id = invoice['id'] as int;
+  final remaining = data.balance(id);
   if (remaining <= 0) return 'Paid';
-  final overdue =
-      (invoice['due_date'] as String).compareTo(isoDate(manilaNow())) < 0;
+  final paidAmount = data.paid(id);
+  final overdue = (invoice['due_date'] as String).compareTo(manilaToday()) < 0;
   if (overdue) {
-    return data.paid(invoice['id']) > 0 ? 'Partial · overdue' : 'Overdue';
+    return paidAmount > 0 ? 'Partial · overdue' : 'Overdue';
   }
-  return data.paid(invoice['id']) > 0 ? 'Partial' : 'Unpaid';
+  return paidAmount > 0 ? 'Partial' : 'Unpaid';
+}
+
+/// Crisp vector brand mark for Upa Renta: Tropical Roof + 'U' Home Arch + Gold Sun/Coin.
+/// Uses lightweight direct canvas drawing (zero bitmap decode, zero GPU blur).
+class UpaRentaLogo extends StatelessWidget {
+  final double size;
+  const UpaRentaLogo({super.key, this.size = 42});
+
+  @override
+  Widget build(BuildContext context) {
+    final radius = BorderRadius.circular(size * 0.30);
+    return Container(
+      width: size,
+      height: size,
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [Color(0xFF1F6E5C), Color(0xFF144A3E), Color(0xFF0C2E26)],
+        ),
+        borderRadius: radius,
+      ),
+      child: CustomPaint(
+        size: Size.square(size),
+        painter: const _UpaLogoPainter(),
+      ),
+    );
+  }
+}
+
+class _UpaLogoPainter extends CustomPainter {
+  const _UpaLogoPainter();
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final s = size.width / 108.0;
+    final ivory = Paint()
+      ..color = const Color(0xFFFFFDF7)
+      ..style = PaintingStyle.fill
+      ..isAntiAlias = true;
+
+    // Roof chevron
+    final roof = Path()
+      ..moveTo(51.2 * s, 23.2 * s)
+      ..lineTo(23.5 * s, 46.8 * s)
+      ..cubicTo(21.7 * s, 48.3 * s, 21.8 * s, 51.0 * s, 23.7 * s, 52.5 * s)
+      ..lineTo(25.8 * s, 54.1 * s)
+      ..cubicTo(27.6 * s, 55.4 * s, 30.1 * s, 55.2 * s, 31.8 * s, 53.7 * s)
+      ..lineTo(54.0 * s, 34.6 * s)
+      ..lineTo(76.2 * s, 53.7 * s)
+      ..cubicTo(77.9 * s, 55.2 * s, 80.4 * s, 55.4 * s, 82.2 * s, 54.1 * s)
+      ..lineTo(84.3 * s, 52.5 * s)
+      ..cubicTo(86.2 * s, 51.0 * s, 86.3 * s, 48.3 * s, 84.5 * s, 46.8 * s)
+      ..lineTo(56.8 * s, 23.2 * s)
+      ..cubicTo(55.2 * s, 21.8 * s, 52.8 * s, 21.8 * s, 51.2 * s, 23.2 * s)
+      ..close();
+    canvas.drawPath(roof, ivory);
+
+    // 'U' house body
+    final body = Path()
+      ..moveTo(32.0 * s, 51.0 * s)
+      ..cubicTo(32.0 * s, 49.0 * s, 33.6 * s, 47.5 * s, 35.5 * s, 47.5 * s)
+      ..lineTo(39.5 * s, 47.5 * s)
+      ..cubicTo(41.4 * s, 47.5 * s, 43.0 * s, 49.0 * s, 43.0 * s, 51.0 * s)
+      ..lineTo(43.0 * s, 62.5 * s)
+      ..cubicTo(43.0 * s, 68.58 * s, 47.92 * s, 73.5 * s, 54.0 * s, 73.5 * s)
+      ..cubicTo(60.08 * s, 73.5 * s, 65.0 * s, 68.58 * s, 65.0 * s, 62.5 * s)
+      ..lineTo(65.0 * s, 51.0 * s)
+      ..cubicTo(65.0 * s, 49.0 * s, 66.6 * s, 47.5 * s, 68.5 * s, 47.5 * s)
+      ..lineTo(72.5 * s, 47.5 * s)
+      ..cubicTo(74.4 * s, 47.5 * s, 76.0 * s, 49.0 * s, 76.0 * s, 51.0 * s)
+      ..lineTo(76.0 * s, 62.5 * s)
+      ..cubicTo(76.0 * s, 74.65 * s, 66.15 * s, 84.5 * s, 54.0 * s, 84.5 * s)
+      ..cubicTo(41.85 * s, 84.5 * s, 32.0 * s, 74.65 * s, 32.0 * s, 62.5 * s)
+      ..close();
+    canvas.drawPath(body, ivory);
+
+    // Golden Peso coin / Philippine sun emblem
+    final goldPaint = Paint()
+      ..color = gold
+      ..style = PaintingStyle.fill
+      ..isAntiAlias = true;
+    canvas.drawCircle(Offset(54.0 * s, 57.5 * s), 8.2 * s, goldPaint);
+
+    final innerGlow = Paint()
+      ..color = const Color(0xFFFFF6DC)
+      ..style = PaintingStyle.fill
+      ..isAntiAlias = true;
+    canvas.drawCircle(Offset(54.0 * s, 57.5 * s), 3.6 * s, innerGlow);
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }
 
 class PageHeader extends StatelessWidget {
@@ -59,19 +156,19 @@ class PageHeader extends StatelessWidget {
   });
   @override
   Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.only(bottom: 24),
+    padding: const EdgeInsets.only(bottom: 20),
     child: Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         if (eyebrow.isNotEmpty)
           Padding(
-            padding: const EdgeInsets.only(bottom: 8),
+            padding: const EdgeInsets.only(bottom: 6),
             child: Text(
               eyebrow.toUpperCase(),
               style: const TextStyle(
                 fontSize: 11,
-                fontWeight: FontWeight.w700,
-                letterSpacing: 1.8,
+                fontWeight: FontWeight.w800,
+                letterSpacing: 1.5,
                 color: muted,
               ),
             ),
@@ -79,51 +176,73 @@ class PageHeader extends StatelessWidget {
         Wrap(
           alignment: WrapAlignment.spaceBetween,
           crossAxisAlignment: WrapCrossAlignment.center,
-          spacing: 16,
-          runSpacing: 12,
+          spacing: 12,
+          runSpacing: 10,
           children: [
             Text(
               title,
               style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                fontWeight: FontWeight.w700,
+                fontWeight: FontWeight.w800,
                 letterSpacing: -0.8,
               ),
             ),
             ?action,
           ],
         ),
-        const SizedBox(height: 8),
-        Text(subtitle, style: const TextStyle(color: muted, height: 1.5)),
+        const SizedBox(height: 6),
+        Text(subtitle, style: const TextStyle(color: muted, height: 1.45)),
       ],
     ),
   );
 }
 
+/// Lightweight, high-contrast surface card engineered for smooth 60 FPS
+/// scrolling on low-end Android phones (zero BackdropFilter / offscreen blur).
 class SectionCard extends StatelessWidget {
   final Widget child;
   final EdgeInsetsGeometry padding;
   final Color? color;
+  final double borderRadius;
+  final Border? border;
+
   const SectionCard({
     super.key,
     required this.child,
-    this.padding = const EdgeInsets.all(20),
+    this.padding = const EdgeInsets.all(18),
     this.color,
+    this.borderRadius = 20,
+    this.border,
   });
+
   @override
-  Widget build(BuildContext context) => Material(
-    color: color ?? Theme.of(context).colorScheme.surface,
-    shape: RoundedRectangleBorder(
-      borderRadius: BorderRadius.circular(20),
-      side: BorderSide(
-        color: Theme.of(context).dividerColor.withValues(alpha: 0.12),
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final radius = BorderRadius.circular(borderRadius);
+    final resolvedBorder =
+        border ??
+        Border.all(
+          color: isDark ? const Color(0xFF283A31) : const Color(0xFFDCE4DA),
+          width: 1.0,
+        );
+    final resolvedColor =
+        color ?? (isDark ? const Color(0xFF18241E) : Colors.white);
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: resolvedColor,
+        borderRadius: radius,
+        border: resolvedBorder,
       ),
-    ),
-    clipBehavior: Clip.antiAlias,
-    child: SizedBox(
-      width: double.infinity,
-      child: Padding(padding: padding, child: child),
-    ),
-  );
+      child: Material(
+        type: MaterialType.transparency,
+        borderRadius: radius,
+        clipBehavior: Clip.hardEdge,
+        child: Padding(
+          padding: padding,
+          child: SizedBox(width: double.infinity, child: child),
+        ),
+      ),
+    );
+  }
 }
 
 class StatusPill extends StatelessWidget {
@@ -131,27 +250,38 @@ class StatusPill extends StatelessWidget {
   const StatusPill(this.text, {super.key});
   @override
   Widget build(BuildContext context) {
-    final bad = text.toLowerCase().contains('overdue');
-    final good = ['Paid', 'Occupied', 'Finalized'].contains(text);
+    final lower = text.toLowerCase();
+    final bad = lower.contains('overdue') || lower == 'reversed';
+    final good =
+        ['paid', 'occupied', 'finalized'].contains(lower) ||
+        lower.endsWith(' paid');
     final color = bad
         ? danger
         : good
         ? ink
         : amber;
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return DecoratedBox(
       decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.10),
-        borderRadius: BorderRadius.circular(30),
+        color: color.withValues(alpha: isDark ? 0.22 : 0.11),
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(
+          color: color.withValues(alpha: isDark ? 0.42 : 0.26),
+          width: 1.0,
+        ),
       ),
-      child: Text(
-        text,
-        style: TextStyle(
-          fontSize: 12,
-          fontWeight: FontWeight.w700,
-          color: Theme.of(context).brightness == Brightness.dark && good
-              ? const Color(0xFFAAD4B5)
-              : color,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 5),
+        child: Text(
+          text,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: TextStyle(
+            fontSize: 11.5,
+            fontWeight: FontWeight.w700,
+            letterSpacing: 0.1,
+            color: isDark && good ? const Color(0xFFAAD7B9) : color,
+          ),
         ),
       ),
     );
@@ -172,30 +302,34 @@ class EmptyState extends StatelessWidget {
   @override
   Widget build(BuildContext context) => SectionCard(
     child: Padding(
-      padding: const EdgeInsets.symmetric(vertical: 24),
+      padding: const EdgeInsets.symmetric(vertical: 20),
       child: Column(
         children: [
-          Container(
-            padding: const EdgeInsets.all(20),
-            decoration: BoxDecoration(
-              color: sage.withValues(alpha: 0.55),
+          DecoratedBox(
+            decoration: const BoxDecoration(
+              color: sage,
               shape: BoxShape.circle,
             ),
-            child: Icon(icon, size: 34, color: ink),
+            child: Padding(
+              padding: const EdgeInsets.all(20),
+              child: Icon(icon, size: 32, color: ink),
+            ),
           ),
-          const SizedBox(height: 20),
+          const SizedBox(height: 18),
           Text(
             title,
-            style: Theme.of(context).textTheme.titleLarge,
+            style: Theme.of(
+              context,
+            ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700),
             textAlign: TextAlign.center,
           ),
-          const SizedBox(height: 10),
+          const SizedBox(height: 8),
           Text(
             description,
             style: const TextStyle(color: muted, height: 1.5),
             textAlign: TextAlign.center,
           ),
-          if (action != null) ...[const SizedBox(height: 22), action!],
+          if (action != null) ...[const SizedBox(height: 20), action!],
         ],
       ),
     ),
@@ -208,7 +342,7 @@ class DetailRow extends StatelessWidget {
   const DetailRow(this.label, this.value, {super.key, this.strong = false});
   @override
   Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.symmetric(vertical: 7),
+    padding: const EdgeInsets.symmetric(vertical: 6),
     child: Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -227,7 +361,7 @@ class DetailRow extends StatelessWidget {
             value,
             textAlign: TextAlign.right,
             style: TextStyle(
-              fontWeight: strong ? FontWeight.w700 : FontWeight.w500,
+              fontWeight: strong ? FontWeight.w700 : FontWeight.w600,
             ),
           ),
         ),
@@ -269,34 +403,6 @@ Widget input(
         : null,
   ),
 );
-
-class DateInput extends StatelessWidget {
-  final TextEditingController controller;
-  final String label;
-  const DateInput({super.key, required this.controller, required this.label});
-  @override
-  Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.only(bottom: 16),
-    child: TextFormField(
-      controller: controller,
-      readOnly: true,
-      decoration: InputDecoration(
-        labelText: label,
-        suffixIcon: const Icon(Icons.calendar_month_outlined),
-      ),
-      onTap: () async {
-        final parsed = DateTime.tryParse(controller.text) ?? manilaNow();
-        final selected = await showDatePicker(
-          context: context,
-          initialDate: parsed,
-          firstDate: DateTime(2000),
-          lastDate: DateTime(2100),
-        );
-        if (selected != null) controller.text = isoDate(selected);
-      },
-    ),
-  );
-}
 
 Future<bool> showEditor(
   BuildContext context, {
@@ -365,14 +471,17 @@ Future<bool> showEditor(
                             style: const TextStyle(color: muted, height: 1.5),
                           ),
                         ),
-                      const SizedBox(height: 20),
+                      const SizedBox(height: 18),
                       fields(sheetContext, setState),
                       if (error != null)
                         Padding(
                           padding: const EdgeInsets.only(bottom: 16),
                           child: Text(
                             error!,
-                            style: const TextStyle(color: danger),
+                            style: const TextStyle(
+                              color: danger,
+                              fontWeight: FontWeight.w600,
+                            ),
                           ),
                         ),
                       FilledButton(

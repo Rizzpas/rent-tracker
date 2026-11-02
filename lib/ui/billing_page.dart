@@ -1,4 +1,3 @@
-import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import '../data/models.dart' hide Row;
 import '../data/models.dart' as model show Row;
@@ -31,11 +30,10 @@ class BillingPage extends StatelessWidget {
             )
             .toList()
           ..sort(
-            (a, b) => (data.room(a['room_id'])?['name'] as String).compareTo(
-              data.room(b['room_id'])?['name'] as String,
-            ),
+            (a, b) => (data.room(a['room_id'] as int)?['name'] as String)
+                .compareTo(data.room(b['room_id'] as int)?['name'] as String),
           );
-    final bills = data.invoices.where((i) => i['period'] == period).toList();
+    final bills = data.invoicesForPeriod(period);
     final draftCount = bills.where((i) => i['status'] == 'draft').length;
     final total = bills.fold<int>(0, (n, i) => n + (i['total_cents'] as int));
     return Column(
@@ -91,8 +89,9 @@ class BillingPage extends StatelessWidget {
                 'Assign a tenant in Rooms, or choose a month during an existing tenant’s stay. Their room will appear here.',
           ),
         ...eligible.map((tenancy) {
-          final room = data.room(tenancy['room_id'])!;
-          final matches = bills.where((i) => i['tenancy_id'] == tenancy['id']);
+          final tenancyId = tenancy['id'] as int;
+          final room = data.room(tenancy['room_id'] as int)!;
+          final matches = bills.where((i) => i['tenancy_id'] == tenancyId);
           final invoice = matches.isEmpty ? null : matches.first;
           return Padding(
             padding: const EdgeInsets.only(bottom: 16),
@@ -108,7 +107,7 @@ class BillingPage extends StatelessWidget {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              room['name'],
+                              room['name'] as String,
                               style: const TextStyle(
                                 fontSize: 19,
                                 fontWeight: FontWeight.w700,
@@ -116,7 +115,7 @@ class BillingPage extends StatelessWidget {
                             ),
                             const SizedBox(height: 5),
                             Text(
-                              data.tenantName(tenancy['id']),
+                              '${data.tenantName(tenancyId)} · ${dueDayLabel(tenancy['due_day'] as int)}',
                               style: const TextStyle(
                                 color: muted,
                                 fontSize: 13,
@@ -137,7 +136,16 @@ class BillingPage extends StatelessWidget {
                   ),
                   const SizedBox(height: 16),
                   if (invoice == null) ...[
-                    DetailRow('Agreed rent', money(tenancy['rent_cents'])),
+                    DetailRow(
+                      'Agreed rent',
+                      money(tenancy['rent_cents'] as int),
+                    ),
+                    DetailRow(
+                      'Default due date',
+                      dateLabel(
+                        dueDateForPeriod(period, tenancy['due_day'] as int),
+                      ),
+                    ),
                     DetailRow(
                       'Electricity',
                       _utilityLabel(room, 'electricity', 'kWh'),
@@ -150,12 +158,12 @@ class BillingPage extends StatelessWidget {
                       label: const Text('Enter readings & prepare'),
                     ),
                   ] else ...[
-                    ...data.lines
-                        .where((l) => l['invoice_id'] == invoice['id'])
+                    ...data
+                        .linesForInvoice(invoice['id'] as int)
                         .map(
                           (l) => DetailRow(
-                            _kindLabel(l['kind']),
-                            money(l['amount_cents']),
+                            _kindLabel(l['kind'] as String),
+                            money(l['amount_cents'] as int),
                           ),
                         ),
                     const Padding(
@@ -164,18 +172,18 @@ class BillingPage extends StatelessWidget {
                     ),
                     DetailRow(
                       'New charges',
-                      money(invoice['total_cents']),
+                      money(invoice['total_cents'] as int),
                       strong: true,
                     ),
                     if (invoice['status'] == 'final')
                       DetailRow(
                         'Still to pay',
-                        money(data.balance(invoice['id'])),
+                        money(data.balance(invoice['id'] as int)),
                         strong: true,
                       ),
                     const SizedBox(height: 4),
                     Text(
-                      'Due ${dateLabel(invoice['due_date'])} · ${invoice['reference']}',
+                      'Due ${dateLabel(invoice['due_date'] as String)} · ${invoice['reference']}',
                       style: const TextStyle(color: muted, fontSize: 11),
                     ),
                     const SizedBox(height: 16),
@@ -186,13 +194,15 @@ class BillingPage extends StatelessWidget {
                             context,
                             title: 'Finalize this bill?',
                             message:
-                                '${room['name']} · ${data.tenantName(tenancy['id'])}\n\nNew charges: ${money(invoice['total_cents'])}\nDue: ${dateLabel(invoice['due_date'])}\n\nThe readings, rates, and amounts will be locked. Review the breakdown before continuing.',
+                                '${room['name']} · ${data.tenantName(tenancyId)}\n\nNew charges: ${money(invoice['total_cents'] as int)}\nDue: ${dateLabel(invoice['due_date'] as String)}\n\nThe readings, rates, and amounts will be locked. Review the breakdown before continuing.',
                             confirmLabel: 'Finalize bill',
                           );
                           if (confirmed && context.mounted) {
                             await perform(
                               context,
-                              () => repository.finalizeInvoice(invoice['id']),
+                              () => repository.finalizeInvoice(
+                                invoice['id'] as int,
+                              ),
                               onChanged: onChanged,
                               success:
                                   'Bill finalized. It is ready for payment.',
@@ -235,9 +245,9 @@ class BillingPage extends StatelessWidget {
                   child: ListTile(
                     contentPadding: EdgeInsets.zero,
                     title: Text(
-                      '${data.room(invoice['room_id'])?['name']} · ${data.tenantName(invoice['tenancy_id'])}',
+                      '${data.room(invoice['room_id'] as int)?['name']} · ${data.tenantName(invoice['tenancy_id'] as int)}',
                     ),
-                    subtitle: Text(money(invoice['total_cents'])),
+                    subtitle: Text(money(invoice['total_cents'] as int)),
                     trailing: StatusPill(invoiceStatus(data, invoice)),
                     onTap: () => showInvoiceDetails(context, data, invoice),
                   ),
@@ -282,14 +292,18 @@ class BillingPage extends StatelessWidget {
                     earlierFinalIds.contains(r['invoice_id']),
               )
               .toList()
-            ..sort((a, b) => (b['period'] as String).compareTo(a['period']));
+            ..sort(
+              (a, b) =>
+                  (b['period'] as String).compareTo(a['period'] as String),
+            );
       return readings.isEmpty ? null : readings.first;
     }
 
+    final existingReadings = invoice == null
+        ? const <model.Row>[]
+        : data.readingsForInvoice(invoice['id'] as int);
     model.Row? currentReading(String kind) {
-      final readings = data.readings.where(
-        (r) => r['invoice_id'] == invoice?['id'] && r['kind'] == kind,
-      );
+      final readings = existingReadings.where((r) => r['kind'] == kind);
       return readings.isEmpty ? null : readings.first;
     }
 
@@ -297,75 +311,70 @@ class BillingPage extends StatelessWidget {
     final previousWater = previousReading('water');
     final electricityPrevious = TextEditingController(
       text: decimalOf(
-        previousElectricity?['current_value'] ??
-            currentReading('electricity')?['previous_value'] ??
-            0,
+        (previousElectricity?['current_value'] ??
+                currentReading('electricity')?['previous_value'] ??
+                0)
+            as int,
         3,
       ),
     );
     final waterPrevious = TextEditingController(
       text: decimalOf(
-        previousWater?['current_value'] ??
-            currentReading('water')?['previous_value'] ??
-            0,
+        (previousWater?['current_value'] ??
+                currentReading('water')?['previous_value'] ??
+                0)
+            as int,
         3,
       ),
     );
     final electricityCurrent = TextEditingController(
       text: currentReading('electricity') == null
           ? ''
-          : decimalOf(currentReading('electricity')!['current_value'], 3),
+          : decimalOf(currentReading('electricity')!['current_value'] as int, 3),
     );
     final waterCurrent = TextEditingController(
       text: currentReading('water') == null
           ? ''
-          : decimalOf(currentReading('water')!['current_value'], 3),
+          : decimalOf(currentReading('water')!['current_value'] as int, 3),
     );
-    final electricLine = data.lines.where(
-      (l) => l['invoice_id'] == invoice?['id'] && l['kind'] == 'electricity',
-    );
-    final waterLine = data.lines.where(
-      (l) => l['invoice_id'] == invoice?['id'] && l['kind'] == 'water',
-    );
-    final adjustmentLines = data.lines.where(
-      (l) => l['invoice_id'] == invoice?['id'] && l['kind'] == 'adjustment',
+    final existingLines = invoice == null
+        ? const <model.Row>[]
+        : data.linesForInvoice(invoice['id'] as int);
+    final electricLine = existingLines.where((l) => l['kind'] == 'electricity');
+    final waterLine = existingLines.where((l) => l['kind'] == 'water');
+    final adjustmentLines = existingLines.where(
+      (l) => l['kind'] == 'adjustment',
     );
     final electricityShared = TextEditingController(
       text: electricLine.isEmpty
           ? '0.00'
-          : decimalOf(electricLine.first['amount_cents']),
+          : decimalOf(electricLine.first['amount_cents'] as int),
     );
     final waterShared = TextEditingController(
       text: waterLine.isEmpty
           ? '0.00'
-          : decimalOf(waterLine.first['amount_cents']),
+          : decimalOf(waterLine.first['amount_cents'] as int),
     );
     final adjustment = TextEditingController(
       text: adjustmentLines.isEmpty
           ? '0.00'
-          : decimalOf(adjustmentLines.first['amount_cents']),
+          : decimalOf(adjustmentLines.first['amount_cents'] as int),
     );
     final adjustmentNote = TextEditingController(
-      text: adjustmentLines.isEmpty ? '' : adjustmentLines.first['description'],
+      text: adjustmentLines.isEmpty
+          ? ''
+          : adjustmentLines.first['description'] as String,
     );
-    final start = DateTime.parse('$period-01');
-    final maxDay = DateTime(start.year, start.month + 1, 0).day;
     final dueDate = TextEditingController(
       text:
-          invoice?['due_date'] ??
-          isoDate(
-            DateTime(
-              start.year,
-              start.month,
-              math.min(tenancy['due_day'] as int, maxDay),
-            ),
-          ),
+          (invoice?['due_date'] as String?) ??
+          dueDateForPeriod(period, tenancy['due_day'] as int),
     );
     final result = await showEditor(
       context,
       title: '${room['name']} · ${monthLabel(period)}',
       description:
-          '${data.tenantName(tenancy['id'])}\nSave a draft first. You can review every charge before finalizing.',
+          '${data.tenantName(tenancy['id'] as int)}\nSave a draft first. You can review every charge before finalizing.',
       fields: (context, setState) {
         void changed(String _) => setState(() {});
         int? previewCharge(
@@ -376,7 +385,7 @@ class BillingPage extends StatelessWidget {
         ) {
           try {
             final mode = room['${kind}_mode'];
-            if (mode == 'fixed') return room['${kind}_rate'];
+            if (mode == 'fixed') return room['${kind}_rate'] as int;
             if (mode == 'shared') return parseFixed(shared.text);
             final consumption =
                 parseFixed(current.text, decimals: 3) -
@@ -413,7 +422,11 @@ class BillingPage extends StatelessWidget {
         return Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            DetailRow('House rent', money(tenancy['rent_cents']), strong: true),
+            DetailRow(
+              'House rent',
+              money(tenancy['rent_cents'] as int),
+              strong: true,
+            ),
             const SizedBox(height: 14),
             _meterInputs(
               context,
@@ -485,7 +498,7 @@ class BillingPage extends StatelessWidget {
           );
         }
         await repository.saveDraft(
-          tenancyId: tenancy['id'],
+          tenancyId: tenancy['id'] as int,
           period: period,
           dueDate: dueDate.text,
           electricityCurrent: room['electricity_mode'] == 'metered'
@@ -600,7 +613,7 @@ class BillingPage extends StatelessWidget {
             onChanged: onChanged,
           ),
           Text(
-            '${consumption == null ? '—' : '$consumption $unit'} × ${money(room['${kind}_rate'])} / $unit',
+            '${consumption == null ? '—' : '$consumption $unit'} × ${money(room['${kind}_rate'] as int)} / $unit',
             style: const TextStyle(color: muted, fontSize: 12),
           ),
           const SizedBox(height: 6),
@@ -626,10 +639,10 @@ class BillingPage extends StatelessWidget {
 
   String _utilityLabel(model.Row room, String kind, String unit) =>
       room['${kind}_mode'] == 'fixed'
-      ? '${money(room['${kind}_rate'])} fixed'
+      ? '${money(room['${kind}_rate'] as int)} fixed'
       : room['${kind}_mode'] == 'shared'
       ? 'Shared monthly charge'
-      : '${money(room['${kind}_rate'])} / $unit';
+      : '${money(room['${kind}_rate'] as int)} / $unit';
 }
 
 String _kindLabel(String kind) => switch (kind) {
@@ -644,23 +657,18 @@ Future<void> showInvoiceDetails(
   AppData data,
   model.Row invoice,
 ) async {
-  final lines = data.lines
-      .where((l) => l['invoice_id'] == invoice['id'])
-      .toList();
-  final readings = data.readings
-      .where((r) => r['invoice_id'] == invoice['id'])
-      .toList();
+  final invoiceId = invoice['id'] as int;
+  final lines = data.linesForInvoice(invoiceId);
+  final readings = data.readingsForInvoice(invoiceId);
   final prior = data.invoices
       .where(
         (i) =>
             i['tenancy_id'] == invoice['tenancy_id'] &&
             i['status'] == 'final' &&
-            (i['period'] as String).compareTo(invoice['period']) < 0,
+            (i['period'] as String).compareTo(invoice['period'] as String) < 0,
       )
-      .fold<int>(0, (n, i) => n + data.balance(i['id']));
-  final allocations = data.allocations
-      .where((a) => a['invoice_id'] == invoice['id'])
-      .toList();
+      .fold<int>(0, (n, i) => n + data.balance(i['id'] as int));
+  final allocations = data.allocationsForInvoice(invoiceId);
   await showDetails(
     context,
     title: 'Billing statement',
@@ -669,7 +677,7 @@ Future<void> showInvoiceDetails(
         children: [
           Expanded(
             child: Text(
-              invoice['reference'],
+              invoice['reference'] as String,
               style: const TextStyle(fontWeight: FontWeight.w600),
             ),
           ),
@@ -678,33 +686,33 @@ Future<void> showInvoiceDetails(
       ),
       const SizedBox(height: 16),
       Text(
-        data.tenantName(invoice['tenancy_id']),
+        data.tenantName(invoice['tenancy_id'] as int),
         style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w700),
       ),
       const SizedBox(height: 5),
       Text(
-        '${data.room(invoice['room_id'])?['name']} · ${monthLabel(invoice['period'])}',
+        '${data.room(invoice['room_id'] as int)?['name']} · ${monthLabel(invoice['period'] as String)}',
         style: const TextStyle(color: muted),
       ),
-      DetailRow('Due date', dateLabel(invoice['due_date'])),
+      DetailRow('Due date', dateLabel(invoice['due_date'] as String)),
       const Divider(height: 24),
       ...lines.map(
         (l) => Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             DetailRow(
-              _kindLabel(l['kind']),
-              money(l['amount_cents']),
+              _kindLabel(l['kind'] as String),
+              money(l['amount_cents'] as int),
               strong: true,
             ),
             if ((l['description'] as String).isNotEmpty)
               Text(
-                l['description'],
+                l['description'] as String,
                 style: const TextStyle(fontSize: 12, color: muted, height: 1.5),
               ),
             if (l['kind'] == 'electricity' || l['kind'] == 'water')
               Text(
-                '${decimalOf(l['quantity'], 3)} × ${money(l['rate_cents'])}',
+                '${decimalOf(l['quantity'] as int, 3)} × ${money(l['rate_cents'] as int)}',
                 style: const TextStyle(fontSize: 11, color: muted),
               ),
             const SizedBox(height: 8),
@@ -714,19 +722,19 @@ Future<void> showInvoiceDetails(
       ...readings.map(
         (r) => DetailRow(
           '${r['kind'] == 'electricity' ? 'Electric' : 'Water'} meter',
-          '${decimalOf(r['previous_value'], 3)} → ${decimalOf(r['current_value'], 3)}',
+          '${decimalOf(r['previous_value'] as int, 3)} → ${decimalOf(r['current_value'] as int, 3)}',
         ),
       ),
       const Divider(height: 24),
       DetailRow(
         'This month’s new charges',
-        money(invoice['total_cents']),
+        money(invoice['total_cents'] as int),
         strong: true,
       ),
-      DetailRow('Paid toward this bill', money(data.paid(invoice['id']))),
+      DetailRow('Paid toward this bill', money(data.paid(invoiceId))),
       DetailRow(
         'Remaining on this bill',
-        money(data.balance(invoice['id'])),
+        money(data.balance(invoiceId)),
         strong: true,
       ),
       if (prior > 0) ...[
@@ -754,19 +762,18 @@ Future<void> showInvoiceDetails(
         ),
         const SizedBox(height: 10),
         ...allocations.map((a) {
-          final p = data.payments.firstWhere((p) => p['id'] == a['payment_id']);
+          final p = data.payment(a['payment_id'] as int);
+          if (p == null) return const SizedBox.shrink();
           return DetailRow(
-            '${dateLabel(p['date'])} · ${p['method']}${p['reversed_at'] == null ? '' : ' · reversed'}',
-            money(a['amount_cents']),
+            '${dateLabel(p['date'] as String)} · ${p['method']}${p['reversed_at'] == null ? '' : ' · reversed'}',
+            money(a['amount_cents'] as int),
           );
         }),
       ],
       const SizedBox(height: 24),
       FilledButton.icon(
-        onPressed: () => perform(
-          context,
-          () => DocumentService.statement(data, invoice['id']),
-        ),
+        onPressed: () =>
+            perform(context, () => DocumentService.statement(data, invoiceId)),
         icon: const Icon(Icons.picture_as_pdf_outlined),
         label: const Text('Open PDF statement'),
       ),

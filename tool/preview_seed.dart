@@ -1,14 +1,14 @@
-import 'package:bahay_rent/data/models.dart';
-import 'package:bahay_rent/data/repository.dart';
+import 'package:upa_renta/data/models.dart';
+import 'package:upa_renta/data/repository.dart';
 
 /// Demonstration records for the isolated browser preview only.
 /// This is never imported by the Android application entry point.
 Future<void> seedPreviewData(RentalRepository repository) async {
   final now = manilaNow();
   final period = billingPeriod(now);
-  final priorStart = DateTime(now.year, now.month - 1);
+  final priorStart = DateTime.utc(now.year, now.month - 1, 1);
   final previousPeriod = billingPeriod(priorStart);
-  final previousPaymentDate = isoDate(DateTime(now.year, now.month, 0));
+  final previousPaymentDate = isoDate(DateTime.utc(now.year, now.month, 0));
   final today = isoDate(now);
 
   await repository.saveSettings({
@@ -26,6 +26,8 @@ Future<void> seedPreviewData(RentalRepository repository) async {
     'Ana Reyes',
     'Carlo Mendoza',
   ];
+  // Showcase common Philippine due schedules: 5th, 15th, 30th, and End of month.
+  const dueDays = [5, 15, 30, 31];
 
   for (var index = 0; index < rents.length; index++) {
     final sharedWater = index == 3;
@@ -41,6 +43,7 @@ Future<void> seedPreviewData(RentalRepository repository) async {
     });
     if (index >= names.length) continue;
 
+    final dueDay = dueDays[index];
     final tenancyId = await repository.assignTenant(
       roomId: roomId,
       name: names[index],
@@ -48,7 +51,7 @@ Future<void> seedPreviewData(RentalRepository repository) async {
       moveIn: '$previousPeriod-01',
       rentCents: rents[index],
       depositCents: rents[index],
-      dueDay: 5,
+      dueDay: dueDay,
       notes: index == 0
           ? 'Prefers GCash. Receipt provided after each payment.'
           : '',
@@ -59,7 +62,7 @@ Future<void> seedPreviewData(RentalRepository repository) async {
     final priorInvoice = await repository.saveDraft(
       tenancyId: tenancyId,
       period: previousPeriod,
-      dueDate: '$previousPeriod-05',
+      dueDate: dueDateForPeriod(previousPeriod, dueDay),
       electricityPrevious: baseline,
       electricityCurrent: previousCurrent,
       waterSharedCents: sharedWater ? 20000 : null,
@@ -84,7 +87,7 @@ Future<void> seedPreviewData(RentalRepository repository) async {
     final invoice = await repository.saveDraft(
       tenancyId: tenancyId,
       period: period,
-      dueDate: '$period-05',
+      dueDate: dueDateForPeriod(period, dueDay),
       electricityCurrent: previousCurrent + 97400 + index * 13000,
       waterSharedCents: sharedWater ? 18000 : null,
       adjustmentCents: index == 3 ? -25000 : 0,

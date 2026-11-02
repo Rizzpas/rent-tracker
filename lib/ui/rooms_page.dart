@@ -28,7 +28,9 @@ class _RoomsPageState extends State<RoomsPage> {
         widget.data.rooms
             .where((r) => showArchived || r['archived'] == 0)
             .toList()
-          ..sort((a, b) => (a['name'] as String).compareTo(b['name']));
+          ..sort(
+            (a, b) => (a['name'] as String).compareTo(b['name'] as String),
+          );
     final active = widget.data.rooms.where((r) => r['archived'] == 0).length;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -66,10 +68,11 @@ class _RoomsPageState extends State<RoomsPage> {
                 'Add a room with its monthly rent and utility rates. Then assign your first tenant.',
           ),
         ...rooms.map((room) {
-          final tenancy = widget.data.activeTenancy(room['id']);
+          final roomId = room['id'] as int;
+          final tenancy = widget.data.activeTenancy(roomId);
           final tenant = tenancy == null
               ? null
-              : widget.data.tenant(tenancy['tenant_id']);
+              : widget.data.tenant(tenancy['tenant_id'] as int);
           return Padding(
             padding: const EdgeInsets.only(bottom: 14),
             child: SectionCard(
@@ -78,16 +81,18 @@ class _RoomsPageState extends State<RoomsPage> {
                 children: [
                   Row(
                     children: [
-                      Container(
-                        padding: const EdgeInsets.all(12),
+                      DecoratedBox(
                         decoration: BoxDecoration(
-                          color: sage.withValues(alpha: 0.5),
-                          borderRadius: BorderRadius.circular(14),
+                          color: sage.withValues(alpha: 0.65),
+                          borderRadius: BorderRadius.circular(16),
                         ),
-                        child: const Icon(
-                          Icons.meeting_room_outlined,
-                          size: 26,
-                          color: ink,
+                        child: const Padding(
+                          padding: EdgeInsets.all(12),
+                          child: Icon(
+                            Icons.meeting_room_outlined,
+                            size: 26,
+                            color: ink,
+                          ),
                         ),
                       ),
                       const SizedBox(width: 14),
@@ -96,13 +101,13 @@ class _RoomsPageState extends State<RoomsPage> {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              room['name'],
+                              room['name'] as String,
                               style: Theme.of(context).textTheme.titleLarge
                                   ?.copyWith(fontWeight: FontWeight.w700),
                             ),
                             const SizedBox(height: 5),
                             Text(
-                              '${money(tenancy?['rent_cents'] ?? room['rent_cents'])} / month',
+                              '${money((tenancy?['rent_cents'] ?? room['rent_cents']) as int)} / month',
                               style: const TextStyle(
                                 color: muted,
                                 fontSize: 13,
@@ -130,7 +135,7 @@ class _RoomsPageState extends State<RoomsPage> {
                             if (confirmed && context.mounted) {
                               await perform(
                                 context,
-                                () => widget.repository.archiveRoom(room['id']),
+                                () => widget.repository.archiveRoom(roomId),
                                 onChanged: widget.onChanged,
                                 success: 'Room archived. History is kept.',
                               );
@@ -167,7 +172,7 @@ class _RoomsPageState extends State<RoomsPage> {
                       ),
                       if (tenancy != null)
                         Text(
-                          'Due day ${tenancy['due_day']}',
+                          'Due: ${dueDayLabel(tenancy['due_day'] as int)}',
                           style: const TextStyle(fontSize: 12, color: muted),
                         ),
                     ],
@@ -177,7 +182,7 @@ class _RoomsPageState extends State<RoomsPage> {
                   const SizedBox(height: 16),
                   if (tenancy != null) ...[
                     Text(
-                      tenant?['name'] ?? 'Tenant',
+                      (tenant?['name'] as String?) ?? 'Tenant',
                       style: const TextStyle(
                         fontSize: 17,
                         fontWeight: FontWeight.w700,
@@ -187,12 +192,12 @@ class _RoomsPageState extends State<RoomsPage> {
                     Text(
                       (tenant?['phone'] as String? ?? '').isEmpty
                           ? 'No contact number saved'
-                          : tenant!['phone'],
+                          : tenant!['phone'] as String,
                       style: const TextStyle(color: muted, fontSize: 13),
                     ),
                     const SizedBox(height: 5),
                     Text(
-                      'Moved in ${dateLabel(tenancy['move_in'])}',
+                      'Moved in ${dateLabel(tenancy['move_in'] as String)}',
                       style: const TextStyle(color: muted, fontSize: 12),
                     ),
                     const SizedBox(height: 16),
@@ -212,9 +217,7 @@ class _RoomsPageState extends State<RoomsPage> {
                       icon: const Icon(Icons.person_add_alt_outlined, size: 19),
                       label: const Text('Assign a tenant'),
                     ),
-                    if (widget.data.tenancies.any(
-                      (t) => t['room_id'] == room['id'],
-                    ))
+                    if (widget.data.tenanciesForRoom(roomId).isNotEmpty)
                       TextButton(
                         onPressed: () => roomDetails(context, room),
                         child: const Text('View previous tenants'),
@@ -240,17 +243,19 @@ class _RoomsPageState extends State<RoomsPage> {
   }
 
   Future<void> editRoom(BuildContext context, [model.Row? room]) async {
-    final name = TextEditingController(text: room?['name'] ?? '');
+    final name = TextEditingController(text: (room?['name'] as String?) ?? '');
     final rent = TextEditingController(
-      text: decimalOf(room?['rent_cents'] ?? 0),
+      text: decimalOf((room?['rent_cents'] as int?) ?? 0),
     );
     final electricRate = TextEditingController(
-      text: decimalOf(room?['electricity_rate'] ?? 1200),
+      text: decimalOf((room?['electricity_rate'] as int?) ?? 1200),
     );
     final waterRate = TextEditingController(
-      text: decimalOf(room?['water_rate'] ?? 3500),
+      text: decimalOf((room?['water_rate'] as int?) ?? 3500),
     );
-    final notes = TextEditingController(text: room?['notes'] ?? '');
+    final notes = TextEditingController(
+      text: (room?['notes'] as String?) ?? '',
+    );
     var electricity = room?['electricity_mode'] as String? ?? 'metered';
     var water = room?['water_mode'] as String? ?? 'metered';
     final result = await showEditor(
@@ -384,8 +389,10 @@ class _RoomsPageState extends State<RoomsPage> {
     final name = TextEditingController();
     final phone = TextEditingController();
     final notes = TextEditingController();
-    final moveIn = TextEditingController(text: isoDate(manilaNow()));
-    final rent = TextEditingController(text: decimalOf(room['rent_cents']));
+    final moveIn = TextEditingController(text: manilaToday());
+    final rent = TextEditingController(
+      text: decimalOf(room['rent_cents'] as int),
+    );
     final deposit = TextEditingController(text: '0.00');
     final day = TextEditingController(text: '5');
     final result = await showEditor(
@@ -416,19 +423,13 @@ class _RoomsPageState extends State<RoomsPage> {
             keyboard: const TextInputType.numberWithOptions(decimal: true),
             helper: 'Tracked separately from rent payments.',
           ),
-          input(
-            day,
-            'Payment due day (1–31)',
-            keyboard: TextInputType.number,
-            helper: 'Shorter months use their last day.',
-            required: true,
-          ),
+          DueDaySelector(controller: day),
           input(notes, 'Tenant notes (optional)', lines: 3),
         ],
       ),
       onSave: () async {
         await widget.repository.assignTenant(
-          roomId: room['id'],
+          roomId: room['id'] as int,
           name: requiredText(name, 'the tenant’s name'),
           phone: phone.text.trim(),
           moveIn: moveIn.text,
@@ -447,11 +448,13 @@ class _RoomsPageState extends State<RoomsPage> {
   }
 
   Future<void> editTenant(BuildContext context, model.Row tenancy) async {
-    final tenant = widget.data.tenant(tenancy['tenant_id'])!;
-    final name = TextEditingController(text: tenant['name']);
-    final phone = TextEditingController(text: tenant['phone']);
-    final notes = TextEditingController(text: tenant['notes']);
-    final rent = TextEditingController(text: decimalOf(tenancy['rent_cents']));
+    final tenant = widget.data.tenant(tenancy['tenant_id'] as int)!;
+    final name = TextEditingController(text: tenant['name'] as String);
+    final phone = TextEditingController(text: tenant['phone'] as String);
+    final notes = TextEditingController(text: tenant['notes'] as String);
+    final rent = TextEditingController(
+      text: decimalOf(tenancy['rent_cents'] as int),
+    );
     final day = TextEditingController(text: '${tenancy['due_day']}');
     final result = await showEditor(
       context,
@@ -469,18 +472,13 @@ class _RoomsPageState extends State<RoomsPage> {
             keyboard: const TextInputType.numberWithOptions(decimal: true),
             required: true,
           ),
-          input(
-            day,
-            'Payment due day (1–31)',
-            keyboard: TextInputType.number,
-            required: true,
-          ),
+          DueDaySelector(controller: day),
           input(notes, 'Notes (optional)', lines: 3),
         ],
       ),
       onSave: () async {
         await widget.repository.updateTenant(
-          tenancyId: tenancy['id'],
+          tenancyId: tenancy['id'] as int,
           name: requiredText(name, 'the tenant’s name'),
           phone: phone.text.trim(),
           rentCents: parseFixed(rent.text),
@@ -497,15 +495,15 @@ class _RoomsPageState extends State<RoomsPage> {
   }
 
   Future<void> moveOut(BuildContext context, model.Row tenancy) async {
-    final date = TextEditingController(text: isoDate(manilaNow()));
+    final date = TextEditingController(text: manilaToday());
     final result = await showEditor(
       context,
       title: 'Move tenant out?',
       description:
-          '${widget.data.tenantName(tenancy['id'])} will no longer occupy this room. Every past bill, payment, and deposit remains in the ledger. Settle the deposit separately.',
+          '${widget.data.tenantName(tenancy['id'] as int)} will no longer occupy this room. Every past bill, payment, and deposit remains in the ledger. Settle the deposit separately.',
       fields: (context, _) =>
           DateInput(controller: date, label: 'Move-out date'),
-      onSave: () => widget.repository.moveOut(tenancy['id'], date.text),
+      onSave: () => widget.repository.moveOut(tenancy['id'] as int, date.text),
       saveLabel: 'Confirm move-out',
       destructive: true,
     );
@@ -514,17 +512,18 @@ class _RoomsPageState extends State<RoomsPage> {
   }
 
   Future<void> settleDeposit(BuildContext context, model.Row tenancy) async {
+    final tenancyId = tenancy['id'] as int;
     final amount = TextEditingController(
-      text: decimalOf(widget.data.depositBalance(tenancy['id'])),
+      text: decimalOf(widget.data.depositBalance(tenancyId)),
     );
     final notes = TextEditingController();
-    final date = TextEditingController(text: isoDate(manilaNow()));
+    final date = TextEditingController(text: manilaToday());
     var kind = 'refund';
     final result = await showEditor(
       context,
       title: 'Settle security deposit',
       description:
-          'Available deposit: ${money(widget.data.depositBalance(tenancy['id']))}. Deductions record the tenant’s authorized use of their deposit and do not count as rent collection.',
+          'Available deposit: ${money(widget.data.depositBalance(tenancyId))}. Deductions record the tenant’s authorized use of their deposit and do not count as rent collection.',
       fields: (context, setState) => Column(
         children: [
           Padding(
@@ -575,7 +574,7 @@ class _RoomsPageState extends State<RoomsPage> {
         ],
       ),
       onSave: () => widget.repository.settleDeposit(
-        tenancyId: tenancy['id'],
+        tenancyId: tenancyId,
         kind: kind,
         amountCents: parseFixed(amount.text),
         date: date.text,
@@ -590,14 +589,15 @@ class _RoomsPageState extends State<RoomsPage> {
   }
 
   Future<void> roomDetails(BuildContext context, model.Row room) async {
-    final stays =
-        widget.data.tenancies.where((t) => t['room_id'] == room['id']).toList()
-          ..sort((a, b) => (b['move_in'] as String).compareTo(a['move_in']));
+    final stays = [...widget.data.tenanciesForRoom(room['id'] as int)]
+      ..sort(
+        (a, b) => (b['move_in'] as String).compareTo(a['move_in'] as String),
+      );
     await showDetails(
       context,
-      title: room['name'],
+      title: room['name'] as String,
       children: [
-        DetailRow('Default monthly rent', money(room['rent_cents'])),
+        DetailRow('Default monthly rent', money(room['rent_cents'] as int)),
         DetailRow(
           'Electricity',
           _utilityDescription(room, 'electricity', 'kWh'),
@@ -606,7 +606,10 @@ class _RoomsPageState extends State<RoomsPage> {
         if ((room['notes'] as String).isNotEmpty)
           Padding(
             padding: const EdgeInsets.symmetric(vertical: 12),
-            child: Text(room['notes'], style: const TextStyle(color: muted)),
+            child: Text(
+              room['notes'] as String,
+              style: const TextStyle(color: muted),
+            ),
           ),
         const SizedBox(height: 16),
         Text('Tenant history', style: Theme.of(context).textTheme.titleLarge),
@@ -617,10 +620,9 @@ class _RoomsPageState extends State<RoomsPage> {
             style: TextStyle(color: muted),
           ),
         ...stays.map((stay) {
-          final tenant = widget.data.tenant(stay['tenant_id'])!;
-          final movements = widget.data.deposits
-              .where((d) => d['tenancy_id'] == stay['id'])
-              .toList();
+          final stayId = stay['id'] as int;
+          final tenant = widget.data.tenant(stay['tenant_id'] as int)!;
+          final movements = widget.data.depositsForTenancy(stayId);
           return Padding(
             padding: const EdgeInsets.only(bottom: 16),
             child: SectionCard(
@@ -629,7 +631,7 @@ class _RoomsPageState extends State<RoomsPage> {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   Text(
-                    tenant['name'],
+                    tenant['name'] as String,
                     style: const TextStyle(
                       fontSize: 18,
                       fontWeight: FontWeight.w700,
@@ -637,23 +639,23 @@ class _RoomsPageState extends State<RoomsPage> {
                   ),
                   const SizedBox(height: 6),
                   Text(
-                    '${dateLabel(stay['move_in'])} → ${stay['move_out'] == null ? 'Present' : dateLabel(stay['move_out'])}',
+                    '${dateLabel(stay['move_in'] as String)} → ${stay['move_out'] == null ? 'Present' : dateLabel(stay['move_out'] as String)}',
                     style: const TextStyle(color: muted, fontSize: 12),
                   ),
                   if ((tenant['phone'] as String).isNotEmpty)
-                    DetailRow('Contact', tenant['phone']),
-                  DetailRow('Agreed rent', money(stay['rent_cents'])),
-                  DetailRow('Due day', '${stay['due_day']}'),
+                    DetailRow('Contact', tenant['phone'] as String),
+                  DetailRow('Agreed rent', money(stay['rent_cents'] as int)),
+                  DetailRow('Due schedule', dueDayLabel(stay['due_day'] as int)),
                   DetailRow(
                     'Deposit held',
-                    money(widget.data.depositBalance(stay['id'])),
+                    money(widget.data.depositBalance(stayId)),
                     strong: true,
                   ),
                   if ((tenant['notes'] as String).isNotEmpty)
                     Padding(
                       padding: const EdgeInsets.symmetric(vertical: 8),
                       child: Text(
-                        tenant['notes'],
+                        tenant['notes'] as String,
                         style: const TextStyle(color: muted),
                       ),
                     ),
@@ -663,11 +665,11 @@ class _RoomsPageState extends State<RoomsPage> {
                           ? 'Received'
                           : d['kind'] == 'refund'
                           ? 'Refund'
-                          : 'Deduction'} · ${dateLabel(d['date'])}',
-                      money(d['amount_cents']),
+                          : 'Deduction'} · ${dateLabel(d['date'] as String)}',
+                      money(d['amount_cents'] as int),
                     ),
                   ),
-                  if (widget.data.depositBalance(stay['id']) > 0 &&
+                  if (widget.data.depositBalance(stayId) > 0 &&
                       stay['move_out'] != null)
                     OutlinedButton(
                       onPressed: () {
@@ -676,7 +678,7 @@ class _RoomsPageState extends State<RoomsPage> {
                       },
                       child: const Text('Refund or deduct deposit'),
                     ),
-                  if (widget.data.depositBalance(stay['id']) > 0 &&
+                  if (widget.data.depositBalance(stayId) > 0 &&
                       stay['move_out'] == null)
                     const Padding(
                       padding: EdgeInsets.only(top: 8),
@@ -719,8 +721,8 @@ class _RoomsPageState extends State<RoomsPage> {
   String _utilityDescription(model.Row room, String kind, String unit) {
     if (room['${kind}_mode'] == 'shared') return 'Shared · entered monthly';
     if (room['${kind}_mode'] == 'fixed') {
-      return '${money(room['${kind}_rate'])} / month';
+      return '${money(room['${kind}_rate'] as int)} / month';
     }
-    return '${money(room['${kind}_rate'])} / $unit';
+    return '${money(room['${kind}_rate'] as int)} / $unit';
   }
 }

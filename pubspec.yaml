@@ -1,5 +1,5 @@
-name: bahay_rent
-description: Offline rental management and billing for Philippine properties.
+name: upa_renta
+description: Fast, offline-first rental, utility billing, and Collections Day tracker for Philippine properties.
 publish_to: none
 version: 1.0.0+1
 environment:

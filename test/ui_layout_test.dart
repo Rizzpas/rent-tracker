@@ -1,12 +1,14 @@
-import 'package:bahay_rent/data/models.dart' hide Row;
-import 'package:bahay_rent/data/repository.dart';
-import 'package:bahay_rent/ui/home_page.dart';
-import 'package:bahay_rent/ui/rooms_page.dart';
-import 'package:bahay_rent/ui/billing_page.dart';
-import 'package:bahay_rent/ui/payments_page.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
+import 'package:upa_renta/data/models.dart' hide Row;
+import 'package:upa_renta/data/repository.dart';
+import 'package:upa_renta/ui/billing_page.dart';
+import 'package:upa_renta/ui/collections_page.dart';
+import 'package:upa_renta/ui/home_page.dart';
+import 'package:upa_renta/ui/more_page.dart';
+import 'package:upa_renta/ui/payments_page.dart';
+import 'package:upa_renta/ui/rooms_page.dart';
 
 void main() {
   late RentalRepository repository;
@@ -38,7 +40,7 @@ void main() {
         'move_in': '$period-01',
         'move_out': null,
         'rent_cents': 650000,
-        'due_day': 5,
+        'due_day': 31,
       },
     ],
     readings: [
@@ -58,7 +60,7 @@ void main() {
         'tenancy_id': 1,
         'room_id': 1,
         'period': period,
-        'due_date': '$period-05',
+        'due_date': date,
         'status': 'final',
         'total_cents': 705000,
         'reference': 'BILL-000001',
@@ -134,8 +136,15 @@ void main() {
   });
   tearDownAll(() => repository.close());
 
-  for (final pageName in ['Home', 'Rooms', 'Billing', 'Payments']) {
-    testWidgets('$pageName fits a 360px phone with larger text', (
+  for (final pageName in [
+    'Home',
+    'Rooms',
+    'Billing',
+    'Payments',
+    'Collections',
+    'More',
+  ]) {
+    testWidgets('$pageName fits a 360px phone with 1.3x larger text', (
       tester,
     ) async {
       tester.view.physicalSize = const Size(360, 800);
@@ -163,11 +172,23 @@ void main() {
           onChanged: changed,
           period: period,
         ),
-        _ => PaymentsPage(
+        'Payments' => PaymentsPage(
           data: populated,
           repository: repository,
           onChanged: changed,
           period: period,
+        ),
+        'Collections' => CollectionsView(
+          data: populated,
+          repository: repository,
+          onReload: () async => populated,
+        ),
+        _ => MorePage(
+          data: populated,
+          repository: repository,
+          onChanged: changed,
+          period: period,
+          enablePlatformServices: false,
         ),
       };
       final previousHandler = FlutterError.onError!;
@@ -185,7 +206,7 @@ void main() {
           ),
           home: Scaffold(
             body: SingleChildScrollView(
-              padding: const EdgeInsets.all(20),
+              padding: const EdgeInsets.all(16),
               child: page,
             ),
           ),
@@ -194,7 +215,10 @@ void main() {
       await tester.pumpAndSettle();
       FlutterError.onError = previousHandler;
       expect(tester.takeException(), isNull);
-      expect(find.textContaining('Maria Dela Cruz'), findsWidgets);
+      expect(find.byType(BackdropFilter), findsNothing);
+      if (pageName != 'More') {
+        expect(find.textContaining('Maria Dela Cruz'), findsWidgets);
+      }
     });
   }
 }

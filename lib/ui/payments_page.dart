@@ -4,6 +4,7 @@ import '../data/models.dart' hide Row;
 import '../data/models.dart' as model show Row;
 import '../data/repository.dart';
 import '../services/documents.dart';
+import 'collections_page.dart';
 import 'common.dart';
 
 class PaymentsPage extends StatefulWidget {
@@ -45,16 +46,23 @@ class _PaymentsPageState extends State<PaymentsPage> {
             )
             .toList()
           ..sort((a, b) {
-            final byDate = (b['date'] as String).compareTo(a['date']);
-            return byDate != 0 ? byDate : (b['id'] as int).compareTo(a['id']);
+            final byDate = (b['date'] as String).compareTo(a['date'] as String);
+            return byDate != 0 ? byDate : (b['id'] as int).compareTo(a['id'] as int);
           });
     final outstanding =
         widget.data.invoices
             .where(
-              (i) => i['status'] == 'final' && widget.data.balance(i['id']) > 0,
+              (i) =>
+                  i['status'] == 'final' &&
+                  widget.data.balance(i['id'] as int) > 0,
             )
             .toList()
-          ..sort((a, b) => (a['due_date'] as String).compareTo(b['due_date']));
+          ..sort(
+            (a, b) =>
+                (a['due_date'] as String).compareTo(b['due_date'] as String),
+          );
+    final schedule = CollectionsSchedule.from(widget.data);
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -97,7 +105,23 @@ class _PaymentsPageState extends State<PaymentsPage> {
             ],
           ),
         ),
-        const SizedBox(height: 18),
+        const SizedBox(height: 14),
+        OutlinedButton.icon(
+          key: const ValueKey('payments-collections-day'),
+          onPressed: () => openCollectionsDay(
+            context,
+            data: widget.data,
+            repository: widget.repository,
+            onChanged: widget.onChanged,
+          ),
+          icon: const Icon(Icons.bolt_rounded, color: amber),
+          label: Text(
+            schedule.actionableCount > 0
+                ? 'Collections Day (${schedule.actionableCount} due · 1-tap pay & receipt)'
+                : 'Open Collections Day (1-tap pay & receipt)',
+          ),
+        ),
+        const SizedBox(height: 10),
         FilledButton.icon(
           onPressed: () => recordPaymentDialog(
             context,
@@ -134,14 +158,14 @@ class _PaymentsPageState extends State<PaymentsPage> {
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
                                   Text(
-                                    '${widget.data.room(invoice['room_id'])?['name']} · ${widget.data.tenantName(invoice['tenancy_id'])}',
+                                    '${widget.data.room(invoice['room_id'] as int)?['name']} · ${widget.data.tenantName(invoice['tenancy_id'] as int)}',
                                     style: const TextStyle(
                                       fontWeight: FontWeight.w700,
                                     ),
                                   ),
                                   const SizedBox(height: 5),
                                   Text(
-                                    '${monthLabel(invoice['period'])} · due ${dateLabel(invoice['due_date'])}',
+                                    '${monthLabel(invoice['period'] as String)} · due ${dateLabel(invoice['due_date'] as String)}',
                                     style: const TextStyle(
                                       color: muted,
                                       fontSize: 11,
@@ -152,7 +176,7 @@ class _PaymentsPageState extends State<PaymentsPage> {
                             ),
                             const SizedBox(width: 8),
                             Text(
-                              money(widget.data.balance(invoice['id'])),
+                              money(widget.data.balance(invoice['id'] as int)),
                               style: const TextStyle(
                                 fontWeight: FontWeight.w700,
                                 fontSize: 16,
@@ -174,7 +198,7 @@ class _PaymentsPageState extends State<PaymentsPage> {
                                 data: widget.data,
                                 repository: widget.repository,
                                 onChanged: widget.onChanged,
-                                invoiceId: invoice['id'],
+                                invoiceId: invoice['id'] as int,
                               ),
                               icon: const Icon(Icons.add, size: 18),
                               label: const Text('Record payment'),
@@ -216,12 +240,11 @@ class _PaymentsPageState extends State<PaymentsPage> {
                 'Payments will appear here as you record them. Finalize a bill in Monthly Billing to receive your first payment.',
           ),
         ...payments.map((p) {
-          final allocation = widget.data.allocations.where(
-            (a) => a['payment_id'] == p['id'],
-          );
+          final paymentId = p['id'] as int;
+          final allocation = widget.data.allocationsForPayment(paymentId);
           final invoice = allocation.isEmpty
               ? null
-              : widget.data.invoice(allocation.first['invoice_id']);
+              : widget.data.invoice(allocation.first['invoice_id'] as int);
           final reversed = p['reversed_at'] != null;
           return Padding(
             padding: const EdgeInsets.only(bottom: 10),
@@ -235,28 +258,31 @@ class _PaymentsPageState extends State<PaymentsPage> {
                   children: [
                     Row(
                       children: [
-                        Container(
-                          padding: const EdgeInsets.all(10),
+                        DecoratedBox(
                           decoration: BoxDecoration(
                             color: (reversed ? danger : ink).withValues(
-                              alpha: 0.08,
+                              alpha: 0.10,
                             ),
-                            borderRadius: BorderRadius.circular(12),
+                            borderRadius: BorderRadius.circular(14),
                           ),
-                          child: Icon(
-                            reversed
-                                ? Icons.undo_rounded
-                                : p['method'] == 'Cash'
-                                ? Icons.payments_outlined
-                                : p['method'] == 'GCash'
-                                ? Icons.phone_android_outlined
-                                : Icons.account_balance_outlined,
-                            color: reversed ? danger : muted,
-                            size: 23,
+                          child: Padding(
+                            padding: const EdgeInsets.all(9),
+                            child: Icon(
+                              reversed
+                                  ? Icons.undo_rounded
+                                  : p['method'] == 'Cash'
+                                  ? Icons.payments_outlined
+                                  : p['method'] == 'GCash'
+                                  ? Icons.phone_android_outlined
+                                  : Icons.account_balance_outlined,
+                              color: reversed ? danger : ink,
+                              size: 20,
+                            ),
                           ),
                         ),
-                        const SizedBox(width: 12),
+                        const SizedBox(width: 10),
                         Expanded(
+                          flex: 5,
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
@@ -264,7 +290,7 @@ class _PaymentsPageState extends State<PaymentsPage> {
                                 invoice == null
                                     ? 'Payment'
                                     : widget.data.tenantName(
-                                        invoice['tenancy_id'],
+                                        invoice['tenancy_id'] as int,
                                       ),
                                 style: const TextStyle(
                                   fontWeight: FontWeight.w700,
@@ -272,7 +298,7 @@ class _PaymentsPageState extends State<PaymentsPage> {
                               ),
                               const SizedBox(height: 4),
                               Text(
-                                '${invoice == null ? '' : '${widget.data.room(invoice['room_id'])?['name']} · '}${p['method']}',
+                                '${invoice == null ? '' : '${widget.data.room(invoice['room_id'] as int)?['name']} · '}${p['method']}',
                                 style: const TextStyle(
                                   color: muted,
                                   fontSize: 12,
@@ -282,30 +308,62 @@ class _PaymentsPageState extends State<PaymentsPage> {
                           ),
                         ),
                         const SizedBox(width: 8),
-                        Column(
-                          crossAxisAlignment: CrossAxisAlignment.end,
-                          children: [
-                            Text(
-                              money(p['amount_cents']),
-                              style: TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.w700,
-                                color: reversed ? muted : null,
-                                decoration: reversed
-                                    ? TextDecoration.lineThrough
-                                    : null,
+                        Flexible(
+                          flex: 4,
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.end,
+                            children: [
+                              FittedBox(
+                                fit: BoxFit.scaleDown,
+                                alignment: Alignment.centerRight,
+                                child: Text(
+                                  money(p['amount_cents'] as int),
+                                  style: TextStyle(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w700,
+                                    color: reversed ? muted : null,
+                                    decoration: reversed
+                                        ? TextDecoration.lineThrough
+                                        : null,
+                                  ),
+                                ),
                               ),
-                            ),
-                            const SizedBox(height: 5),
-                            Text(
-                              dateLabel(p['date']),
-                              style: const TextStyle(
-                                fontSize: 11,
-                                color: muted,
+                              const SizedBox(height: 5),
+                              Text(
+                                dateLabel(p['date'] as String),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                  fontSize: 11,
+                                  color: muted,
+                                ),
                               ),
-                            ),
-                          ],
+                            ],
+                          ),
                         ),
+                        if (!reversed) ...[
+                          const SizedBox(width: 2),
+                          IconButton(
+                            tooltip: 'Open receipt',
+                            visualDensity: VisualDensity.compact,
+                            padding: const EdgeInsets.all(6),
+                            constraints: const BoxConstraints(
+                              minWidth: 36,
+                              minHeight: 36,
+                            ),
+                            onPressed: () => perform(
+                              context,
+                              () => DocumentService.receipt(
+                                widget.data,
+                                paymentId,
+                              ),
+                            ),
+                            icon: const Icon(
+                              Icons.receipt_long_outlined,
+                              size: 19,
+                            ),
+                          ),
+                        ],
                       ],
                     ),
                     if (reversed)
@@ -323,7 +381,7 @@ class _PaymentsPageState extends State<PaymentsPage> {
           const Padding(
             padding: EdgeInsets.only(top: 10),
             child: Text(
-              'Tap a payment for its receipt or to make a correction. Reversed transactions remain in your history.',
+              'Tap the receipt icon for an instant PDF receipt, or tap a payment to inspect or correct it.',
               textAlign: TextAlign.center,
               style: TextStyle(fontSize: 12, color: muted, height: 1.5),
             ),
@@ -333,45 +391,44 @@ class _PaymentsPageState extends State<PaymentsPage> {
   }
 
   Future<void> paymentDetails(BuildContext context, model.Row payment) async {
-    final allocations = widget.data.allocations
-        .where((a) => a['payment_id'] == payment['id'])
-        .toList();
+    final paymentId = payment['id'] as int;
+    final allocations = widget.data.allocationsForPayment(paymentId);
     final reversed = payment['reversed_at'] != null;
     await showDetails(
       context,
       title: reversed ? 'Reversed payment' : 'Payment details',
       children: [
         Text(
-          money(payment['amount_cents']),
+          money(payment['amount_cents'] as int),
           style: Theme.of(
             context,
           ).textTheme.headlineLarge?.copyWith(fontWeight: FontWeight.w700),
         ),
         const SizedBox(height: 16),
-        DetailRow('Payment date', dateLabel(payment['date'])),
-        DetailRow('Method', payment['method']),
+        DetailRow('Payment date', dateLabel(payment['date'] as String)),
+        DetailRow('Method', payment['method'] as String),
         DetailRow(
           'Receipt reference',
-          'RCP-${(payment['id'] as int).toString().padLeft(6, '0')}',
+          'RCP-${paymentId.toString().padLeft(6, '0')}',
         ),
         if ((payment['reference'] as String).isNotEmpty)
-          DetailRow('Transaction reference', payment['reference']),
+          DetailRow('Transaction reference', payment['reference'] as String),
         if ((payment['notes'] as String).isNotEmpty)
           Padding(
             padding: const EdgeInsets.symmetric(vertical: 12),
             child: Text(
-              payment['notes'],
+              payment['notes'] as String,
               style: const TextStyle(color: muted, height: 1.5),
             ),
           ),
         const Divider(height: 24),
         ...allocations.map((a) {
-          final invoice = widget.data.invoice(a['invoice_id'])!;
+          final invoice = widget.data.invoice(a['invoice_id'] as int)!;
           return Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               Text(
-                widget.data.tenantName(invoice['tenancy_id']),
+                widget.data.tenantName(invoice['tenancy_id'] as int),
                 style: const TextStyle(
                   fontWeight: FontWeight.w700,
                   fontSize: 17,
@@ -379,16 +436,16 @@ class _PaymentsPageState extends State<PaymentsPage> {
               ),
               const SizedBox(height: 6),
               Text(
-                '${widget.data.room(invoice['room_id'])?['name']} · ${monthLabel(invoice['period'])}',
+                '${widget.data.room(invoice['room_id'] as int)?['name']} · ${monthLabel(invoice['period'] as String)}',
                 style: const TextStyle(color: muted),
               ),
               DetailRow(
                 'Applied to ${invoice['reference']}',
-                money(a['amount_cents']),
+                money(a['amount_cents'] as int),
               ),
               DetailRow(
                 'Current bill balance',
-                money(widget.data.balance(invoice['id'])),
+                money(widget.data.balance(invoice['id'] as int)),
               ),
               const SizedBox(height: 10),
             ],
@@ -406,7 +463,7 @@ class _PaymentsPageState extends State<PaymentsPage> {
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  payment['reversal_reason'] ?? '',
+                  (payment['reversal_reason'] as String?) ?? '',
                   style: const TextStyle(height: 1.5),
                 ),
                 const SizedBox(height: 8),
@@ -422,7 +479,7 @@ class _PaymentsPageState extends State<PaymentsPage> {
         FilledButton.icon(
           onPressed: () => perform(
             context,
-            () => DocumentService.receipt(widget.data, payment['id']),
+            () => DocumentService.receipt(widget.data, paymentId),
           ),
           icon: const Icon(Icons.picture_as_pdf_outlined),
           label: const Text('Open PDF receipt'),
@@ -450,11 +507,11 @@ class _PaymentsPageState extends State<PaymentsPage> {
       context,
       title: 'Reverse this payment?',
       description:
-          '${money(payment['amount_cents'])} will be restored to the bill’s unpaid balance. The original transaction and your reason will stay in the audit history. If needed, record a new payment with the correct details afterward.',
+          '${money(payment['amount_cents'] as int)} will be restored to the bill’s unpaid balance. The original transaction and your reason will stay in the audit history. If needed, record a new payment with the correct details afterward.',
       fields: (context, _) =>
           input(reason, 'Reason for correction', lines: 3, required: true),
       onSave: () => widget.repository.reversePayment(
-        payment['id'],
+        payment['id'] as int,
         requiredText(reason, 'a reason for the correction'),
       ),
       saveLabel: 'Reverse payment',
@@ -474,9 +531,14 @@ Future<void> recordPaymentDialog(
 }) async {
   final bills =
       data.invoices
-          .where((i) => i['status'] == 'final' && data.balance(i['id']) > 0)
+          .where(
+            (i) => i['status'] == 'final' && data.balance(i['id'] as int) > 0,
+          )
           .toList()
-        ..sort((a, b) => (a['due_date'] as String).compareTo(b['due_date']));
+        ..sort(
+          (a, b) =>
+              (a['due_date'] as String).compareTo(b['due_date'] as String),
+        );
   if (bills.isEmpty) {
     await showDialog<void>(
       context: context,
@@ -497,7 +559,7 @@ Future<void> recordPaymentDialog(
   }
   var selected = invoiceId ?? bills.first['id'] as int;
   final amount = TextEditingController(text: decimalOf(data.balance(selected)));
-  final date = TextEditingController(text: isoDate(manilaNow()));
+  final date = TextEditingController(text: manilaToday());
   final reference = TextEditingController();
   final notes = TextEditingController();
   var method = 'Cash';
@@ -521,9 +583,9 @@ Future<void> recordPaymentDialog(
               items: bills
                   .map(
                     (i) => DropdownMenuItem<int>(
-                      value: i['id'],
+                      value: i['id'] as int,
                       child: Text(
-                        '${data.room(i['room_id'])?['name']} · ${data.tenantName(i['tenancy_id'])} · ${monthLabel(i['period'])}',
+                        '${data.room(i['room_id'] as int)?['name']} · ${data.tenantName(i['tenancy_id'] as int)} · ${monthLabel(i['period'] as String)}',
                         overflow: TextOverflow.ellipsis,
                       ),
                     ),
@@ -550,7 +612,7 @@ Future<void> recordPaymentDialog(
                   money(data.balance(selected)),
                   strong: true,
                 ),
-                DetailRow('Due date', dateLabel(invoice['due_date'])),
+                DetailRow('Due date', dateLabel(invoice['due_date'] as String)),
               ],
             ),
           ),
@@ -564,27 +626,27 @@ Future<void> recordPaymentDialog(
             helper: 'Enter a smaller amount to record a partial payment.',
           ),
           DateInput(controller: date, label: 'Payment date'),
+          const Padding(
+            padding: EdgeInsets.only(bottom: 8),
+            child: Text(
+              'Payment method',
+              style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
+            ),
+          ),
           Padding(
             padding: const EdgeInsets.only(bottom: 16),
-            child: DropdownButtonFormField<String>(
-              isExpanded: true,
-              initialValue: method,
-              decoration: const InputDecoration(labelText: 'Payment method'),
-              items: const ['Cash', 'GCash', 'Bank transfer', 'Other']
+            child: Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: const ['Cash', 'GCash', 'Bank transfer', 'Other']
                   .map(
-                    (m) => DropdownMenuItem(
-                      value: m,
-                      child: Text(
-                        m,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
+                    (m) => ChoiceChip(
+                      label: Text(m),
+                      selected: method == m,
+                      onSelected: (_) => setState(() => method = m),
                     ),
                   )
                   .toList(),
-              onChanged: (value) {
-                if (value != null) setState(() => method = value);
-              },
             ),
           ),
           input(reference, 'Transaction reference (optional)'),

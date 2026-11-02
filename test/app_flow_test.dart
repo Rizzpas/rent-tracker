@@ -1,10 +1,10 @@
-import 'package:bahay_rent/app.dart';
-import 'package:bahay_rent/data/models.dart' hide Row;
-import 'package:bahay_rent/data/repository.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
+import 'package:upa_renta/app.dart';
+import 'package:upa_renta/data/models.dart' hide Row;
+import 'package:upa_renta/data/repository.dart';
 
 void main() {
   sqfliteFfiInit();
@@ -22,14 +22,22 @@ void main() {
   });
 
   Future<void> settle(WidgetTester tester) async {
-    await tester.runAsync(
-      () => Future<void>.delayed(const Duration(milliseconds: 150)),
-    );
+    for (var i = 0; i < 40; i++) {
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 50)),
+      );
+      await tester.pump();
+      if (find.byType(CircularProgressIndicator).evaluate().isEmpty) break;
+    }
     await tester.pumpAndSettle();
     // Closing a form completes its route animation before it reloads SQLite.
-    await tester.runAsync(
-      () => Future<void>.delayed(const Duration(milliseconds: 100)),
-    );
+    for (var i = 0; i < 40; i++) {
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 50)),
+      );
+      await tester.pump();
+      if (find.byType(CircularProgressIndicator).evaluate().isEmpty) break;
+    }
     await tester.pumpAndSettle();
   }
 
@@ -41,7 +49,7 @@ void main() {
     addTearDown(tester.view.resetDevicePixelRatio);
     addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
     await tester.pumpWidget(
-      BahayApp(repository: repository, enablePlatformServices: false),
+      UpaRentaApp(repository: repository, enablePlatformServices: false),
     );
     await settle(tester);
   }
@@ -61,14 +69,17 @@ void main() {
       .first;
 
   testWidgets(
-    'first offline launch and all five destinations fit a small screen',
+    'first offline launch, zero BackdropFilter, and all destinations fit a 360px screen',
     (tester) async {
       await openApp(tester, textScale: 1.3);
-      expect(find.text('bahay'), findsOneWidget);
-      expect(find.text('Offline ready'), findsOneWidget);
+      expect(find.text('Upa Renta'), findsOneWidget);
+      expect(find.textContaining('Offline'), findsWidgets);
+      // Low-end Android guarantee: zero BackdropFilter blurs in the shell or pages.
+      expect(find.byType(BackdropFilter), findsNothing);
       expect(tester.takeException(), isNull);
       for (final label in ['Rooms', 'Billing', 'Payments', 'More', 'Home']) {
         await tab(tester, label);
+        expect(find.byType(BackdropFilter), findsNothing);
         await tester.drag(find.byType(ListView).first, const Offset(0, -500));
         await tester.pumpAndSettle();
         expect(tester.takeException(), isNull);
@@ -119,13 +130,12 @@ void main() {
           moveIn: '2026-01-01',
           rentCents: 450000,
           depositCents: 450000,
-          dueDay: 5,
+          dueDay: 15,
         );
         final period = billingPeriod(manilaNow());
         invoiceId = await repository.saveDraft(
           tenancyId: tenancyId,
           period: period,
-          dueDate: '$period-05',
         );
         await repository.finalizeInvoice(invoiceId);
       });
@@ -137,6 +147,8 @@ void main() {
       await tester.tap(record);
       await tester.pumpAndSettle();
       await tester.enterText(field('Amount received'), '2000.00');
+      await tester.tap(find.widgetWithText(ChoiceChip, 'GCash'));
+      await tester.pumpAndSettle();
       final save = find.text('Save payment');
       await tester.ensureVisible(save);
       await tester.pumpAndSettle();
@@ -144,15 +156,16 @@ void main() {
       await settle(tester);
       final data = await tester.runAsync(repository.load);
       expect(data!.payments, hasLength(1));
+      expect(data.payments.single['method'], 'GCash');
       expect(data.paid(invoiceId), 200000);
       expect(data.balance(invoiceId), 290000);
-      expect(data.depositBalance(data.tenancies.single['id']), 450000);
+      expect(data.depositBalance(data.tenancies.single['id'] as int), 450000);
       expect(tester.takeException(), isNull);
     },
   );
 
   testWidgets(
-    'tenant assignment and meter worksheet finalize exact monthly charges',
+    'tenant assignment with End of month chip and meter worksheet finalize exact monthly charges',
     (tester) async {
       await tester.runAsync(
         () => repository.saveRoom({
@@ -175,6 +188,11 @@ void main() {
       await tester.enterText(field('Full name'), 'Luz Reyes');
       await tester.enterText(field('Contact number (optional)'), '09181234567');
       await tester.enterText(field('Security deposit received'), '4500.00');
+      final eomChip = find.widgetWithText(ChoiceChip, 'End of month');
+      await tester.ensureVisible(eomChip);
+      await tester.pumpAndSettle();
+      await tester.tap(eomChip);
+      await tester.pumpAndSettle();
       final assignSave = find.text('Assign tenant');
       await tester.ensureVisible(assignSave);
       await tester.pumpAndSettle();
@@ -182,7 +200,8 @@ void main() {
       await settle(tester);
       var data = (await tester.runAsync(repository.load))!;
       expect(data.tenants.single['name'], 'Luz Reyes');
-      expect(data.depositBalance(data.tenancies.single['id']), 450000);
+      expect(data.tenancies.single['due_day'], 31);
+      expect(data.depositBalance(data.tenancies.single['id'] as int), 450000);
       expect(tester.takeException(), isNull);
 
       await tab(tester, 'Billing');
@@ -211,6 +230,10 @@ void main() {
       data = (await tester.runAsync(repository.load))!;
       final invoiceId = data.invoices.single['id'] as int;
       expect(data.invoices.single['status'], 'draft');
+      expect(
+        data.invoices.single['due_date'],
+        endOfMonthForPeriod(billingPeriod(manilaNow())),
+      );
       final electric = data.lines.singleWhere(
         (line) => line['kind'] == 'electricity',
       );
@@ -237,9 +260,22 @@ void main() {
       data = (await tester.runAsync(repository.load))!;
       expect(data.invoices.single['status'], 'final');
       expect(data.balance(invoiceId), 502647);
-      expect(data.depositBalance(data.tenancies.single['id']), 450000);
+      expect(data.depositBalance(data.tenancies.single['id'] as int), 450000);
       expect(data.payments, isEmpty);
       expect(tester.takeException(), isNull);
     },
   );
+
+  testWidgets('shell month switcher opens custom Upa month picker', (
+    tester,
+  ) async {
+    await openApp(tester);
+    await tester.tap(find.byKey(const ValueKey('period-picker-trigger')));
+    await tester.pumpAndSettle();
+    expect(find.text('BILLING MONTH · ASIA/MANILA'), findsOneWidget);
+    await tester.tap(find.text('Feb'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('February'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
 }

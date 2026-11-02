@@ -1,4 +1,4 @@
-These screenshots show the actual Flutter application at 390 × 844 logical pixels,
+These screenshots show the actual **Upa Renta** Flutter application at 390 × 844 logical pixels,
 using an isolated in-memory SQLite database with fictional records created by
 `test/preview_test.dart`. The installed application starts with empty records.
 
@@ -11,8 +11,10 @@ To regenerate:
 flutter test test/preview_test.dart --dart-define=EXPORT_PREVIEWS=true
 ```
 
-- `home.png`: month overview
-- `home-details.png`: quick actions and monthly billing summary
-- `rooms.png`: tenant and occupancy cards
-- `billing.png`: monthly bill worksheet
-- `payments.png`: collections and remaining balances
+- `home.png`: dashboard overview, Collections Day banner, and top `Collect` button
+- `collections.png`: Collections Day screen (`< 3` taps to record payment & generate receipt)
+- `home-details.png`: quick actions and room-by-room summary
+- `rooms.png`: room cards, tenant agreements, and due-date schedules
+- `billing.png`: monthly billing worksheet
+- `payments.png`: collections ledger, 1-tap receipt icons, and remaining balances
+- `more.png`: backups, reports, local reminders, test notification, and security settings

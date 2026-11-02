@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
 import '../data/models.dart' hide Row;
 import '../data/repository.dart';
-import 'common.dart';
 import 'billing_page.dart';
+import 'collections_page.dart';
+import 'common.dart';
 import 'payments_page.dart';
 
 class HomePage extends StatelessWidget {
@@ -22,16 +23,14 @@ class HomePage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final today = manilaToday();
     final rooms = data.rooms.where((r) => r['archived'] == 0).toList();
     final occupied = rooms
-        .where((r) => data.activeTenancy(r['id']) != null)
+        .where((r) => data.activeTenancy(r['id'] as int) != null)
         .length;
-    final bills = data.invoices
-        .where((i) => i['period'] == period && i['status'] == 'final')
-        .toList();
-    final drafts = data.invoices
-        .where((i) => i['period'] == period && i['status'] == 'draft')
-        .length;
+    final periodInvoices = data.invoicesForPeriod(period);
+    final bills = periodInvoices.where((i) => i['status'] == 'final').toList();
+    final drafts = periodInvoices.where((i) => i['status'] == 'draft').length;
     final billed = bills.fold<int>(0, (n, i) => n + (i['total_cents'] as int));
     final collected = data.payments
         .where(
@@ -42,36 +41,43 @@ class HomePage extends StatelessWidget {
         .fold<int>(0, (n, p) => n + (p['amount_cents'] as int));
     final outstanding = data.invoices
         .where((i) => i['status'] == 'final')
-        .fold<int>(0, (n, i) => n + data.balance(i['id']));
+        .fold<int>(0, (n, i) => n + data.balance(i['id'] as int));
     final previousBalance = data.invoices
         .where(
           (i) =>
               i['status'] == 'final' &&
               (i['period'] as String).compareTo(period) < 0,
         )
-        .fold<int>(0, (n, i) => n + data.balance(i['id']));
+        .fold<int>(0, (n, i) => n + data.balance(i['id'] as int));
     final overdue = data.invoices
         .where(
           (i) =>
               i['status'] == 'final' &&
-              (i['due_date'] as String).compareTo(isoDate(manilaNow())) < 0 &&
-              data.balance(i['id']) > 0,
+              (i['due_date'] as String).compareTo(today) < 0 &&
+              data.balance(i['id'] as int) > 0,
         )
         .toList();
     final overdueAmount = overdue.fold<int>(
       0,
-      (n, i) => n + data.balance(i['id']),
+      (n, i) => n + data.balance(i['id'] as int),
     );
-    final paid = bills.where((i) => data.balance(i['id']) == 0).length;
+    final paid = bills.where((i) => data.balance(i['id'] as int) == 0).length;
     final partial = bills
-        .where((i) => data.balance(i['id']) > 0 && data.paid(i['id']) > 0)
+        .where(
+          (i) =>
+              data.balance(i['id'] as int) > 0 && data.paid(i['id'] as int) > 0,
+        )
         .length;
     final unpaid = bills
-        .where((i) => data.balance(i['id']) > 0 && data.paid(i['id']) == 0)
+        .where(
+          (i) =>
+              data.balance(i['id'] as int) > 0 &&
+              data.paid(i['id'] as int) == 0,
+        )
         .length;
     final expectedByRoom = <int, int>{};
-    for (final invoice in data.invoices.where((i) => i['period'] == period)) {
-      expectedByRoom[invoice['room_id']] = invoice['total_cents'];
+    for (final invoice in periodInvoices) {
+      expectedByRoom[invoice['room_id'] as int] = invoice['total_cents'] as int;
     }
     final monthlyStays =
         data.tenancies
@@ -83,10 +89,13 @@ class HomePage extends StatelessWidget {
                       (t['move_out'] as String).compareTo('$period-01') > 0),
             )
             .toList()
-          ..sort((a, b) => (b['move_in'] as String).compareTo(a['move_in']));
+          ..sort(
+            (a, b) =>
+                (b['move_in'] as String).compareTo(a['move_in'] as String),
+          );
     for (final stay in monthlyStays) {
       expectedByRoom.putIfAbsent(
-        stay['room_id'],
+        stay['room_id'] as int,
         () => stay['rent_cents'] as int,
       );
     }
@@ -99,12 +108,15 @@ class HomePage extends StatelessWidget {
             .where(
               (i) =>
                   i['status'] == 'final' &&
-                  data.balance(i['id']) > 0 &&
-                  (i['due_date'] as String).compareTo(isoDate(manilaNow())) >=
-                      0,
+                  data.balance(i['id'] as int) > 0 &&
+                  (i['due_date'] as String).compareTo(today) >= 0,
             )
             .toList()
-          ..sort((a, b) => (a['due_date'] as String).compareTo(b['due_date']));
+          ..sort(
+            (a, b) =>
+                (a['due_date'] as String).compareTo(b['due_date'] as String),
+          );
+    final schedule = CollectionsSchedule.from(data);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -114,124 +126,202 @@ class HomePage extends StatelessWidget {
           title: 'A little peace of mind.',
           subtitle: 'Your rooms, bills, and collections — all in one place.',
         ),
-        Container(
-          padding: const EdgeInsets.all(24),
+        DecoratedBox(
           decoration: BoxDecoration(
-            color: ink,
+            gradient: const LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [Color(0xFF1F6253), Color(0xFF133B33), Color(0xFF0C241F)],
+            ),
             borderRadius: BorderRadius.circular(24),
           ),
+          child: Padding(
+            padding: const EdgeInsets.all(22),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    DecoratedBox(
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.14),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: const Padding(
+                        padding: EdgeInsets.all(8),
+                        child: Icon(
+                          Icons.savings_outlined,
+                          color: Color(0xFFD4EBD0),
+                          size: 19,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        'PAYMENTS RECEIVED · ${monthLabel(period).toUpperCase()}',
+                        style: const TextStyle(
+                          fontSize: 10.5,
+                          letterSpacing: 1.2,
+                          fontWeight: FontWeight.w700,
+                          color: Color(0xFFD8E9D6),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    money(collected),
+                    style: const TextStyle(
+                      fontSize: 38,
+                      color: Colors.white,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: -1.4,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 6),
+                const Text(
+                  'Money received this month, including older bills.',
+                  style: TextStyle(
+                    fontSize: 12.5,
+                    color: Color(0xFFCAD8CA),
+                    height: 1.4,
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Row(
+                  children: [
+                    Expanded(
+                      child: DecoratedBox(
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(alpha: 0.09),
+                          borderRadius: BorderRadius.circular(14),
+                        ),
+                        child: Padding(
+                          padding: const EdgeInsets.all(13),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text(
+                                'Billed this month',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  color: Color(0xFFCAD8CA),
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                              const SizedBox(height: 5),
+                              FittedBox(
+                                fit: BoxFit.scaleDown,
+                                child: Text(
+                                  money(billed),
+                                  style: const TextStyle(
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.w700,
+                                    color: Colors.white,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: DecoratedBox(
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(alpha: 0.09),
+                          borderRadius: BorderRadius.circular(14),
+                        ),
+                        child: Padding(
+                          padding: const EdgeInsets.all(13),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text(
+                                'Unpaid balances',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  color: Color(0xFFCAD8CA),
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                              const SizedBox(height: 5),
+                              FittedBox(
+                                fit: BoxFit.scaleDown,
+                                child: Text(
+                                  money(outstanding),
+                                  style: const TextStyle(
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.w700,
+                                    color: Color(0xFFF5D88B),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(height: 14),
+        SectionCard(
+          padding: const EdgeInsets.all(16),
+          color: Theme.of(context).brightness == Brightness.dark
+              ? const Color(0xFF1C2E26)
+              : const Color(0xFFEAF3EC),
           child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               Row(
                 children: [
-                  const Icon(
-                    Icons.savings_outlined,
-                    color: Color(0xFFBCD3AB),
-                    size: 21,
-                  ),
-                  const SizedBox(width: 9),
+                  const Icon(Icons.bolt_rounded, color: amber, size: 22),
+                  const SizedBox(width: 8),
                   Expanded(
                     child: Text(
-                      'PAYMENTS RECEIVED · ${monthLabel(period).toUpperCase()}',
-                      style: const TextStyle(
-                        fontSize: 10,
-                        letterSpacing: 1.15,
-                        fontWeight: FontWeight.w700,
-                        color: Color(0xFFCEE0CB),
+                      'Collections Day · Asia/Manila',
+                      style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                        fontWeight: FontWeight.w800,
                       ),
                     ),
                   ),
                 ],
               ),
-              const SizedBox(height: 17),
-              FittedBox(
-                fit: BoxFit.scaleDown,
-                alignment: Alignment.centerLeft,
-                child: Text(
-                  money(collected),
-                  style: const TextStyle(
-                    fontSize: 38,
-                    color: Colors.white,
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: -1.4,
-                  ),
+              const SizedBox(height: 6),
+              Text(
+                schedule.actionableCount == 0
+                    ? 'No unpaid bills due this week. Tap to review today’s receipts.'
+                    : '${schedule.dueThisWeek.length} due this week (${money(schedule.dueThisWeekCents)})'
+                          '${schedule.overdue.isEmpty ? '' : ' · ${schedule.overdue.length} overdue'}. One tap to pay & print receipt.',
+                style: const TextStyle(fontSize: 12.5, height: 1.4),
+              ),
+              const SizedBox(height: 12),
+              FilledButton.icon(
+                key: const ValueKey('home-collections-day'),
+                onPressed: () => openCollectionsDay(
+                  context,
+                  data: data,
+                  repository: repository,
+                  onChanged: onChanged,
                 ),
-              ),
-              const SizedBox(height: 9),
-              const Text(
-                'Money received this month, including older bills.',
-                style: TextStyle(
-                  fontSize: 12,
-                  color: Color(0xFFCAD8CA),
-                  height: 1.5,
-                ),
-              ),
-              const Padding(
-                padding: EdgeInsets.symmetric(vertical: 17),
-                child: Divider(color: Color(0xFF426155), height: 1),
-              ),
-              Row(
-                children: [
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text(
-                          'Billed for this month',
-                          style: TextStyle(
-                            fontSize: 11,
-                            color: Color(0xFFCAD8CA),
-                          ),
-                        ),
-                        const SizedBox(height: 6),
-                        FittedBox(
-                          fit: BoxFit.scaleDown,
-                          child: Text(
-                            money(billed),
-                            style: const TextStyle(
-                              fontSize: 21,
-                              fontWeight: FontWeight.w600,
-                              color: Colors.white,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(width: 18),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text(
-                          'All unpaid balances',
-                          style: TextStyle(
-                            fontSize: 11,
-                            color: Color(0xFFCAD8CA),
-                          ),
-                        ),
-                        const SizedBox(height: 6),
-                        FittedBox(
-                          fit: BoxFit.scaleDown,
-                          child: Text(
-                            money(outstanding),
-                            style: const TextStyle(
-                              fontSize: 21,
-                              fontWeight: FontWeight.w600,
-                              color: Color(0xFFE5D4A6),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
+                icon: const Icon(Icons.bolt_rounded, size: 19),
+                label: const Text('Open Collections Day'),
               ),
             ],
           ),
         ),
-        const SizedBox(height: 16),
+        const SizedBox(height: 14),
         LayoutBuilder(
           builder: (context, constraints) => Wrap(
             spacing: 12,
@@ -258,16 +348,17 @@ class HomePage extends StatelessWidget {
         ),
         const SizedBox(height: 22),
         Text(
-          'A few quick actions',
+          'Quick actions',
           style: Theme.of(
             context,
           ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
         ),
-        const SizedBox(height: 12),
-        FilledButton.icon(
+        const SizedBox(height: 10),
+        OutlinedButton.icon(
           onPressed:
               data.invoices.any(
-                (i) => i['status'] == 'final' && data.balance(i['id']) > 0,
+                (i) =>
+                    i['status'] == 'final' && data.balance(i['id'] as int) > 0,
               )
               ? () => recordPaymentDialog(
                   context,
@@ -277,7 +368,7 @@ class HomePage extends StatelessWidget {
                 )
               : () => onNavigate(3),
           icon: const Icon(Icons.add_rounded),
-          label: const Text('Record a payment'),
+          label: const Text('Record custom payment'),
         ),
         const SizedBox(height: 10),
         OutlinedButton.icon(
@@ -285,11 +376,11 @@ class HomePage extends StatelessWidget {
           icon: const Icon(Icons.electric_meter_outlined),
           label: const Text('Enter readings & prepare bills'),
         ),
-        const SizedBox(height: 26),
+        const SizedBox(height: 24),
         if (rooms.isEmpty)
           EmptyState(
             icon: Icons.cottage_outlined,
-            title: 'Welcome to your new ledger',
+            title: 'Welcome to Upa Renta',
             description:
                 'Start with your first room, then add a tenant. Your records stay safely on this device.',
             action: FilledButton.icon(
@@ -353,12 +444,10 @@ class HomePage extends StatelessWidget {
           ),
           const SizedBox(height: 8),
           ...rooms.map((room) {
-            final roomBills = data.invoices
-                .where(
-                  (i) => i['room_id'] == room['id'] && i['period'] == period,
-                )
+            final roomBills = periodInvoices
+                .where((i) => i['room_id'] == room['id'])
                 .toList();
-            final active = data.activeTenancy(room['id']);
+            final active = data.activeTenancy(room['id'] as int);
             return Padding(
               padding: const EdgeInsets.only(bottom: 10),
               child: SectionCard(
@@ -368,15 +457,17 @@ class HomePage extends StatelessWidget {
                   children: [
                     Row(
                       children: [
-                        Container(
-                          padding: const EdgeInsets.all(10),
+                        DecoratedBox(
                           decoration: BoxDecoration(
-                            color: sage.withValues(alpha: 0.4),
+                            color: sage.withValues(alpha: 0.55),
                             borderRadius: BorderRadius.circular(12),
                           ),
-                          child: const Icon(
-                            Icons.meeting_room_outlined,
-                            color: ink,
+                          child: const Padding(
+                            padding: EdgeInsets.all(10),
+                            child: Icon(
+                              Icons.meeting_room_outlined,
+                              color: ink,
+                            ),
                           ),
                         ),
                         const SizedBox(width: 12),
@@ -385,7 +476,7 @@ class HomePage extends StatelessWidget {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(
-                                room['name'],
+                                room['name'] as String,
                                 style: const TextStyle(
                                   fontWeight: FontWeight.w700,
                                   fontSize: 16,
@@ -395,7 +486,7 @@ class HomePage extends StatelessWidget {
                               Text(
                                 active == null
                                     ? 'Available for a new tenant'
-                                    : data.tenantName(active['id']),
+                                    : '${data.tenantName(active['id'] as int)} · ${dueDayLabel(active['due_day'] as int)}',
                                 style: const TextStyle(
                                   fontSize: 12,
                                   color: muted,
@@ -422,7 +513,9 @@ class HomePage extends StatelessWidget {
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
                                     Text(
-                                      data.tenantName(invoice['tenancy_id']),
+                                      data.tenantName(
+                                        invoice['tenancy_id'] as int,
+                                      ),
                                       style: const TextStyle(
                                         fontSize: 12,
                                         color: muted,
@@ -431,8 +524,8 @@ class HomePage extends StatelessWidget {
                                     const SizedBox(height: 4),
                                     Text(
                                       invoice['status'] == 'draft'
-                                          ? '${money(invoice['total_cents'])} draft'
-                                          : '${money(data.balance(invoice['id']))} remaining',
+                                          ? '${money(invoice['total_cents'] as int)} draft'
+                                          : '${money(data.balance(invoice['id'] as int))} remaining',
                                       style: const TextStyle(
                                         fontWeight: FontWeight.w600,
                                       ),
@@ -490,8 +583,8 @@ class HomePage extends StatelessWidget {
                     .take(4)
                     .map(
                       (i) => DetailRow(
-                        '${data.room(i['room_id'])?['name']} · ${data.tenantName(i['tenancy_id'])}',
-                        money(data.balance(i['id'])),
+                        '${data.room(i['room_id'] as int)?['name']} · ${data.tenantName(i['tenancy_id'] as int)}',
+                        money(data.balance(i['id'] as int)),
                       ),
                     ),
               ],
@@ -527,13 +620,13 @@ class HomePage extends StatelessWidget {
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Text(
-                                  '${data.room(i['room_id'])?['name']} · ${data.tenantName(i['tenancy_id'])}',
+                                  '${data.room(i['room_id'] as int)?['name']} · ${data.tenantName(i['tenancy_id'] as int)}',
                                   style: const TextStyle(
                                     fontWeight: FontWeight.w600,
                                   ),
                                 ),
                                 Text(
-                                  'Due ${dateLabel(i['due_date'])}',
+                                  'Due ${dateLabel(i['due_date'] as String)}',
                                   style: const TextStyle(
                                     color: muted,
                                     fontSize: 12,
@@ -543,7 +636,7 @@ class HomePage extends StatelessWidget {
                             ),
                           ),
                           Text(
-                            money(data.balance(i['id'])),
+                            money(data.balance(i['id'] as int)),
                             style: const TextStyle(fontWeight: FontWeight.w600),
                           ),
                         ],
@@ -562,7 +655,7 @@ class HomePage extends StatelessWidget {
             SizedBox(width: 6),
             Flexible(
               child: Text(
-                'Private by design. Stored on your device.',
+                'Upa Renta · Private by design, stored offline on your device.',
                 style: TextStyle(color: muted, fontSize: 11),
               ),
             ),
@@ -586,21 +679,31 @@ class HomePage extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(icon, color: muted, size: 22),
-          const SizedBox(height: 14),
+          DecoratedBox(
+            decoration: BoxDecoration(
+              color: sage.withValues(alpha: 0.55),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Padding(
+              padding: const EdgeInsets.all(8),
+              child: Icon(icon, color: ink, size: 20),
+            ),
+          ),
+          const SizedBox(height: 12),
           Text(
             value,
-            style: Theme.of(
-              context,
-            ).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w700),
+            style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+              fontWeight: FontWeight.w800,
+              letterSpacing: -0.5,
+            ),
           ),
           const SizedBox(height: 4),
           Text(
             label,
             style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
           ),
-          const SizedBox(height: 5),
-          Text(detail, style: const TextStyle(fontSize: 10, color: muted)),
+          const SizedBox(height: 4),
+          Text(detail, style: const TextStyle(fontSize: 10.5, color: muted)),
         ],
       ),
     ),

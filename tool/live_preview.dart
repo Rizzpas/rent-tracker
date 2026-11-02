@@ -1,11 +1,11 @@
 import 'dart:async';
 
-import 'package:bahay_rent/app.dart';
-import 'package:bahay_rent/data/repository.dart';
-import 'package:bahay_rent/services/documents.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widget_previews.dart';
+import 'package:upa_renta/app.dart';
+import 'package:upa_renta/data/repository.dart';
+import 'package:upa_renta/services/documents.dart';
 
 import 'preview_database.dart';
 import 'preview_seed.dart';
@@ -16,7 +16,11 @@ void main() {
   runApp(const LivePreviewBootstrap());
 }
 
-@Preview(name: 'Bahay · Live app', group: 'Bahay', size: Size(430, 900))
+@Preview(
+  name: 'Upa Renta · Live app',
+  group: 'Upa Renta',
+  size: Size(430, 900),
+)
 Widget liveAppPreview() => const LivePreviewBootstrap();
 
 /// Boots the real application against a separate, temporary browser ledger.
@@ -74,11 +78,11 @@ class _LivePreviewBootstrapState extends State<LivePreviewBootstrap> {
 
   @override
   Widget build(BuildContext context) => MaterialApp(
-    title: 'Bahay · Live UI preview',
+    title: 'Upa Renta · Live UI preview',
     debugShowCheckedModeBanner: false,
     theme: ThemeData(
       useMaterial3: true,
-      colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF163D35)),
+      colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF14453B)),
       fontFamily: 'Roboto',
     ),
     home: Scaffold(
@@ -103,7 +107,7 @@ class _LivePreviewBootstrapState extends State<LivePreviewBootstrap> {
                       ),
                       const SizedBox(width: 8),
                       const Text(
-                        'Live UI preview',
+                        'Upa Renta · Live UI preview',
                         style: TextStyle(
                           fontSize: 12,
                           fontWeight: FontWeight.w700,
@@ -147,7 +151,7 @@ class _LivePreviewBootstrapState extends State<LivePreviewBootstrap> {
                             boxShadow: desktop
                                 ? const [
                                     BoxShadow(
-                                      color: Color(0x1C163D35),
+                                      color: Color(0x1C14453B),
                                       blurRadius: 32,
                                       offset: Offset(0, 10),
                                     ),
@@ -181,7 +185,7 @@ class _LivePreviewBootstrapState extends State<LivePreviewBootstrap> {
                                                 CircularProgressIndicator(),
                                                 SizedBox(height: 22),
                                                 Text(
-                                                  'Preparing your demo ledger…',
+                                                  'Preparing your Upa Renta demo ledger…',
                                                   textAlign: TextAlign.center,
                                                 ),
                                               ],
@@ -190,7 +194,7 @@ class _LivePreviewBootstrapState extends State<LivePreviewBootstrap> {
                                         ),
                                       );
                                     }
-                                    return BahayApp(
+                                    return UpaRentaApp(
                                       repository: snapshot.data!,
                                       enablePlatformServices: false,
                                     );
@@ -208,7 +212,7 @@ class _LivePreviewBootstrapState extends State<LivePreviewBootstrap> {
                   const Padding(
                     padding: EdgeInsets.only(top: 6, bottom: 14),
                     child: Text(
-                      'Explore the actual app screens and forms. Preview changes stay in this browser tab.',
+                      'Explore Upa Renta screens and forms. Preview changes stay in this browser tab.',
                       textAlign: TextAlign.center,
                       style: TextStyle(fontSize: 11, color: Color(0xFF617367)),
                     ),

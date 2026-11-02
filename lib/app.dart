@@ -3,29 +3,30 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'data/models.dart' hide Row;
 import 'data/repository.dart';
-import 'services/documents.dart';
 import 'services/app_lock.dart';
+import 'services/documents.dart';
 import 'services/reminders.dart';
+import 'ui/billing_page.dart';
+import 'ui/collections_page.dart';
 import 'ui/common.dart';
 import 'ui/home_page.dart';
-import 'ui/rooms_page.dart';
-import 'ui/billing_page.dart';
-import 'ui/payments_page.dart';
 import 'ui/more_page.dart';
+import 'ui/payments_page.dart';
+import 'ui/rooms_page.dart';
 
-class BahayApp extends StatefulWidget {
+class UpaRentaApp extends StatefulWidget {
   final RentalRepository? repository;
   final bool enablePlatformServices;
-  const BahayApp({
+  const UpaRentaApp({
     super.key,
     this.repository,
     this.enablePlatformServices = true,
   });
   @override
-  State<BahayApp> createState() => _BahayAppState();
+  State<UpaRentaApp> createState() => _UpaRentaAppState();
 }
 
-class _BahayAppState extends State<BahayApp> {
+class _UpaRentaAppState extends State<UpaRentaApp> {
   RentalRepository? _repository;
   AppData? _data;
   Object? _error;
@@ -94,93 +95,142 @@ class _BahayAppState extends State<BahayApp> {
   }
 
   void _month(int delta) {
-    final current = DateTime.parse('$_period-01');
-    setState(
-      () => _period = billingPeriod(
-        DateTime(current.year, current.month + delta),
-      ),
-    );
+    final year = int.parse(_period.substring(0, 4));
+    final month = int.parse(_period.substring(5, 7));
+    final shifted = DateTime.utc(year, month + delta, 1);
+    if (shifted.year >= 2000 && shifted.year <= 2100) {
+      setState(() => _period = billingPeriod(shifted));
+    }
   }
 
+  Widget _activePage(AppData data, RentalRepository repository) =>
+      switch (_page) {
+        0 => HomePage(
+          data: data,
+          repository: repository,
+          onChanged: _refresh,
+          period: _period,
+          onNavigate: (page) => setState(() => _page = page),
+        ),
+        1 => RoomsPage(
+          data: data,
+          repository: repository,
+          onChanged: _refresh,
+          period: _period,
+        ),
+        2 => BillingPage(
+          data: data,
+          repository: repository,
+          onChanged: _refresh,
+          period: _period,
+        ),
+        3 => PaymentsPage(
+          data: data,
+          repository: repository,
+          onChanged: _refresh,
+          period: _period,
+        ),
+        _ => MorePage(
+          data: data,
+          repository: repository,
+          onChanged: _refresh,
+          period: _period,
+          enablePlatformServices: widget.enablePlatformServices,
+        ),
+      };
+
   ThemeData _theme(Brightness brightness) {
+    final isLight = brightness == Brightness.light;
     final scheme = ColorScheme.fromSeed(
       seedColor: ink,
       brightness: brightness,
-      primary: brightness == Brightness.light ? ink : const Color(0xFFA8D2BA),
-      surface: brightness == Brightness.light
-          ? Colors.white
-          : const Color(0xFF202B26),
+      primary: isLight ? ink : const Color(0xFFAAD7B9),
+      surface: isLight ? Colors.white : const Color(0xFF18241E),
     );
     return ThemeData(
       useMaterial3: true,
       brightness: brightness,
       colorScheme: scheme,
-      scaffoldBackgroundColor: brightness == Brightness.light
-          ? warm
-          : const Color(0xFF151E1A),
+      scaffoldBackgroundColor: isLight
+          ? const Color(0xFFF3F6F1)
+          : const Color(0xFF0E1713),
       fontFamily: 'Roboto',
       textTheme: ThemeData(brightness: brightness).textTheme.apply(
-        bodyColor: brightness == Brightness.light
-            ? const Color(0xFF263B31)
-            : const Color(0xFFE4EBE3),
+        bodyColor: isLight ? const Color(0xFF1D3128) : const Color(0xFFE4ECE4),
       ),
-      appBarTheme: const AppBarTheme(
-        backgroundColor: Colors.transparent,
+      appBarTheme: AppBarTheme(
+        backgroundColor: isLight ? Colors.white : const Color(0xFF14201A),
+        surfaceTintColor: Colors.transparent,
         elevation: 0,
         centerTitle: false,
       ),
-      dividerColor: brightness == Brightness.light
-          ? const Color(0xFFCBD4C9)
-          : const Color(0xFF64736B),
+      dividerColor: isLight ? const Color(0xFFCED8CC) : const Color(0xFF34463C),
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
-        fillColor: brightness == Brightness.light
-            ? const Color(0xFFF7F8F4)
-            : const Color(0xFF17211B),
+        fillColor: isLight ? Colors.white : const Color(0xFF18241E),
         border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(color: Color(0xFFD4DCD2)),
+          borderRadius: BorderRadius.circular(16),
+          borderSide: BorderSide(
+            color: isLight ? const Color(0xFFD6DFD5) : const Color(0xFF2E3E36),
+          ),
         ),
         enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(color: Color(0xFFD4DCD2)),
+          borderRadius: BorderRadius.circular(16),
+          borderSide: BorderSide(
+            color: isLight ? const Color(0xFFD6DFD5) : const Color(0xFF2E3E36),
+          ),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(16),
+          borderSide: BorderSide(
+            color: isLight ? ink : const Color(0xFFAAD7B9),
+            width: 1.8,
+          ),
         ),
         contentPadding: const EdgeInsets.symmetric(
           horizontal: 16,
-          vertical: 18,
+          vertical: 16,
         ),
       ),
       filledButtonTheme: FilledButtonThemeData(
         style: FilledButton.styleFrom(
-          minimumSize: const Size(48, 52),
+          elevation: 0,
+          minimumSize: const Size(48, 50),
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: BorderRadius.circular(14),
           ),
-          textStyle: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+          textStyle: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
         ),
       ),
       outlinedButtonTheme: OutlinedButtonThemeData(
         style: OutlinedButton.styleFrom(
-          minimumSize: const Size(48, 50),
+          minimumSize: const Size(48, 48),
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: BorderRadius.circular(14),
+          ),
+          side: BorderSide(
+            color: isLight ? const Color(0xFFC4D1C2) : const Color(0xFF394C41),
+            width: 1.2,
           ),
           textStyle: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
         ),
       ),
       navigationBarTheme: NavigationBarThemeData(
-        height: 78,
-        backgroundColor: scheme.surface,
-        indicatorColor: brightness == Brightness.light
-            ? sage
-            : const Color(0xFF375744),
+        height: 70,
+        backgroundColor: isLight ? Colors.white : const Color(0xFF14201A),
+        surfaceTintColor: Colors.transparent,
+        elevation: 0,
+        indicatorColor: isLight ? sage : const Color(0xFF274234),
+        indicatorShape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+        ),
         labelTextStyle: WidgetStateProperty.all(
-          const TextStyle(fontSize: 11, fontWeight: FontWeight.w600),
+          const TextStyle(fontSize: 11, fontWeight: FontWeight.w700),
         ),
       ),
       snackBarTheme: SnackBarThemeData(
         behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
       ),
     );
   }
@@ -190,7 +240,7 @@ class _BahayAppState extends State<BahayApp> {
     navigatorKey: DocumentService.navigatorKey,
     builder: (_, child) =>
         widget.enablePlatformServices ? AppLock(child: child!) : child!,
-    title: 'Bahay · Rent made simple',
+    title: 'Upa Renta · Offline rental ledger',
     debugShowCheckedModeBanner: false,
     theme: _theme(Brightness.light),
     darkTheme: _theme(Brightness.dark),
@@ -241,195 +291,213 @@ class _BahayAppState extends State<BahayApp> {
         }
         final data = _data!;
         final repository = _repository!;
-        final pages = [
-          HomePage(
-            data: data,
-            repository: repository,
-            onChanged: _refresh,
-            period: _period,
-            onNavigate: (page) => setState(() => _page = page),
-          ),
-          RoomsPage(
-            data: data,
-            repository: repository,
-            onChanged: _refresh,
-            period: _period,
-          ),
-          BillingPage(
-            data: data,
-            repository: repository,
-            onChanged: _refresh,
-            period: _period,
-          ),
-          PaymentsPage(
-            data: data,
-            repository: repository,
-            onChanged: _refresh,
-            period: _period,
-          ),
-          MorePage(
-            data: data,
-            repository: repository,
-            onChanged: _refresh,
-            period: _period,
-            enablePlatformServices: widget.enablePlatformServices,
-          ),
-        ];
+        final isDark = Theme.of(context).brightness == Brightness.dark;
+        final currentPeriod = billingPeriod(manilaNow());
+        final collectionsCount = CollectionsSchedule.from(data).actionableCount;
+
         return Scaffold(
           body: SafeArea(
             bottom: false,
             child: Column(
               children: [
-                Container(
-                  padding: const EdgeInsets.fromLTRB(22, 16, 16, 14),
+                DecoratedBox(
                   decoration: BoxDecoration(
+                    color: isDark ? const Color(0xFF14201A) : Colors.white,
                     border: Border(
                       bottom: BorderSide(
-                        color: Theme.of(
-                          context,
-                        ).dividerColor.withValues(alpha: 0.25),
+                        color: isDark
+                            ? const Color(0xFF25362D)
+                            : const Color(0xFFE0E7DE),
                       ),
                     ),
                   ),
-                  child: Row(
-                    children: [
-                      Container(
-                        width: 40,
-                        height: 40,
-                        decoration: BoxDecoration(
-                          color: ink,
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: const Icon(
-                          Icons.roofing_rounded,
-                          color: Color(0xFFE7EFDC),
-                          size: 25,
-                        ),
-                      ),
-                      const SizedBox(width: 11),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const Text(
-                              'bahay',
-                              style: TextStyle(
-                                fontSize: 24,
-                                fontWeight: FontWeight.w800,
-                                letterSpacing: -1,
-                              ),
-                            ),
-                            Text(
-                              data.settings['property_name'] ??
-                                  'Your rental property',
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(
-                                fontSize: 11,
-                                color: muted,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 10,
-                          vertical: 7,
-                        ),
-                        decoration: BoxDecoration(
-                          color: sage.withValues(alpha: 0.6),
-                          borderRadius: BorderRadius.circular(24),
-                        ),
-                        child: const Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(
-                              Icons.offline_pin_outlined,
-                              size: 14,
-                              color: ink,
-                            ),
-                            SizedBox(width: 5),
-                            Text(
-                              'Offline ready',
-                              style: TextStyle(
-                                fontSize: 10,
-                                color: ink,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                if (_page != 1)
-                  Padding(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 14,
-                      vertical: 7,
-                    ),
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
                     child: Row(
                       children: [
-                        IconButton(
-                          onPressed: () => _month(-1),
-                          icon: const Icon(Icons.chevron_left),
-                          tooltip: 'Previous month',
-                        ),
+                        const UpaRentaLogo(size: 38),
+                        const SizedBox(width: 10),
                         Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text(
+                                'Upa Renta',
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  fontSize: 19,
+                                  fontWeight: FontWeight.w800,
+                                  letterSpacing: -0.6,
+                                ),
+                              ),
+                              Text(
+                                '${data.settings['property_name'] ?? 'Your property'} · Offline',
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                  fontSize: 11,
+                                  color: muted,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Material(
+                          color: collectionsCount > 0
+                              ? ink
+                              : (isDark
+                                    ? const Color(0xFF21352B)
+                                    : sage.withValues(alpha: 0.85)),
+                          borderRadius: BorderRadius.circular(22),
                           child: InkWell(
-                            borderRadius: BorderRadius.circular(10),
-                            onTap: () async {
-                              final current = DateTime.parse('$_period-01');
-                              final selected = await showDatePicker(
-                                context: context,
-                                initialDate: current,
-                                firstDate: DateTime(2000),
-                                lastDate: DateTime(2100),
-                                initialDatePickerMode: DatePickerMode.year,
-                                helpText: 'Choose a date in the billing month',
-                              );
-                              if (selected != null) {
-                                setState(
-                                  () => _period = billingPeriod(selected),
-                                );
-                              }
-                            },
+                            key: const ValueKey('top-collections-day'),
+                            borderRadius: BorderRadius.circular(22),
+                            onTap: () => openCollectionsDay(
+                              context,
+                              data: data,
+                              repository: repository,
+                              onChanged: _refresh,
+                            ),
                             child: Padding(
-                              padding: const EdgeInsets.symmetric(vertical: 12),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 11,
+                                vertical: 8,
+                              ),
                               child: Row(
-                                mainAxisAlignment: MainAxisAlignment.center,
+                                mainAxisSize: MainAxisSize.min,
                                 children: [
-                                  const Icon(
-                                    Icons.calendar_today_outlined,
+                                  Icon(
+                                    Icons.bolt_rounded,
                                     size: 16,
+                                    color: collectionsCount > 0
+                                        ? gold
+                                        : (isDark
+                                              ? const Color(0xFFAAD7B9)
+                                              : ink),
                                   ),
-                                  const SizedBox(width: 10),
-                                  Flexible(
-                                    child: Text(
-                                      monthLabel(_period),
-                                      maxLines: 2,
-                                      textAlign: TextAlign.center,
-                                      style: const TextStyle(
-                                        fontWeight: FontWeight.w600,
-                                        fontSize: 15,
-                                      ),
+                                  const SizedBox(width: 4),
+                                  Text(
+                                    collectionsCount > 0
+                                        ? 'Collect ($collectionsCount)'
+                                        : 'Collect',
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w800,
+                                      color: collectionsCount > 0
+                                          ? Colors.white
+                                          : (isDark
+                                                ? const Color(0xFFAAD7B9)
+                                                : ink),
                                     ),
                                   ),
-                                  const SizedBox(width: 6),
-                                  const Icon(Icons.expand_more, size: 18),
                                 ],
                               ),
                             ),
                           ),
                         ),
-                        IconButton(
-                          onPressed: () => _month(1),
-                          icon: const Icon(Icons.chevron_right),
-                          tooltip: 'Next month',
-                        ),
                       ],
+                    ),
+                  ),
+                ),
+                if (_page != 1)
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 10, 16, 2),
+                    child: DecoratedBox(
+                      decoration: BoxDecoration(
+                        color: isDark ? const Color(0xFF18241E) : Colors.white,
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(
+                          color: isDark
+                              ? const Color(0xFF283A31)
+                              : const Color(0xFFDCE4DA),
+                        ),
+                      ),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 4,
+                          vertical: 2,
+                        ),
+                        child: Row(
+                          children: [
+                            IconButton(
+                              onPressed: () => _month(-1),
+                              icon: const Icon(Icons.chevron_left_rounded),
+                              tooltip: 'Previous month',
+                            ),
+                            Expanded(
+                              child: InkWell(
+                                key: const ValueKey('period-picker-trigger'),
+                                borderRadius: BorderRadius.circular(12),
+                                onTap: () async {
+                                  final selected = await showUpaMonthPicker(
+                                    context,
+                                    initialPeriod: _period,
+                                  );
+                                  if (selected != null) {
+                                    setState(() => _period = selected);
+                                  }
+                                },
+                                child: Padding(
+                                  padding: const EdgeInsets.symmetric(
+                                    vertical: 8,
+                                  ),
+                                  child: Row(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      Icon(
+                                        Icons.calendar_month_rounded,
+                                        size: 16,
+                                        color: isDark
+                                            ? const Color(0xFFAAD7B9)
+                                            : ink,
+                                      ),
+                                      const SizedBox(width: 6),
+                                      Flexible(
+                                        child: Text(
+                                          monthLabel(_period),
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                          textAlign: TextAlign.center,
+                                          style: const TextStyle(
+                                            fontWeight: FontWeight.w800,
+                                            fontSize: 14,
+                                            letterSpacing: -0.2,
+                                          ),
+                                        ),
+                                      ),
+                                      const SizedBox(width: 2),
+                                      const Icon(
+                                        Icons.keyboard_arrow_down_rounded,
+                                        size: 18,
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ),
+                            if (_period != currentPeriod)
+                              TextButton(
+                                onPressed: () =>
+                                    setState(() => _period = currentPeriod),
+                                child: const Text(
+                                  'Now',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w800,
+                                  ),
+                                ),
+                              ),
+                            IconButton(
+                              onPressed: () => _month(1),
+                              icon: const Icon(Icons.chevron_right_rounded),
+                              tooltip: 'Next month',
+                            ),
+                          ],
+                        ),
+                      ),
                     ),
                   ),
                 Expanded(
@@ -438,12 +506,12 @@ class _BahayAppState extends State<BahayApp> {
                     child: ListView(
                       key: ValueKey('$_page-$_period'),
                       physics: const AlwaysScrollableScrollPhysics(),
-                      padding: const EdgeInsets.fromLTRB(20, 18, 20, 28),
+                      padding: const EdgeInsets.fromLTRB(16, 16, 16, 28),
                       children: [
                         Center(
                           child: ConstrainedBox(
                             constraints: const BoxConstraints(maxWidth: 1000),
-                            child: pages[_page],
+                            child: _activePage(data, repository),
                           ),
                         ),
                       ],
@@ -453,36 +521,47 @@ class _BahayAppState extends State<BahayApp> {
               ],
             ),
           ),
-          bottomNavigationBar: NavigationBar(
-            selectedIndex: _page,
-            onDestinationSelected: (value) => setState(() => _page = value),
-            destinations: const [
-              NavigationDestination(
-                icon: Icon(Icons.home_outlined),
-                selectedIcon: Icon(Icons.home_rounded),
-                label: 'Home',
+          bottomNavigationBar: DecoratedBox(
+            decoration: BoxDecoration(
+              border: Border(
+                top: BorderSide(
+                  color: isDark
+                      ? const Color(0xFF25362D)
+                      : const Color(0xFFE0E7DE),
+                ),
               ),
-              NavigationDestination(
-                icon: Icon(Icons.meeting_room_outlined),
-                selectedIcon: Icon(Icons.meeting_room_rounded),
-                label: 'Rooms',
-              ),
-              NavigationDestination(
-                icon: Icon(Icons.receipt_long_outlined),
-                selectedIcon: Icon(Icons.receipt_long_rounded),
-                label: 'Billing',
-              ),
-              NavigationDestination(
-                icon: Icon(Icons.account_balance_wallet_outlined),
-                selectedIcon: Icon(Icons.account_balance_wallet_rounded),
-                label: 'Payments',
-              ),
-              NavigationDestination(
-                icon: Icon(Icons.grid_view_outlined),
-                selectedIcon: Icon(Icons.grid_view_rounded),
-                label: 'More',
-              ),
-            ],
+            ),
+            child: NavigationBar(
+              selectedIndex: _page,
+              onDestinationSelected: (value) => setState(() => _page = value),
+              destinations: const [
+                NavigationDestination(
+                  icon: Icon(Icons.home_outlined),
+                  selectedIcon: Icon(Icons.home_rounded),
+                  label: 'Home',
+                ),
+                NavigationDestination(
+                  icon: Icon(Icons.meeting_room_outlined),
+                  selectedIcon: Icon(Icons.meeting_room_rounded),
+                  label: 'Rooms',
+                ),
+                NavigationDestination(
+                  icon: Icon(Icons.receipt_long_outlined),
+                  selectedIcon: Icon(Icons.receipt_long_rounded),
+                  label: 'Billing',
+                ),
+                NavigationDestination(
+                  icon: Icon(Icons.account_balance_wallet_outlined),
+                  selectedIcon: Icon(Icons.account_balance_wallet_rounded),
+                  label: 'Payments',
+                ),
+                NavigationDestination(
+                  icon: Icon(Icons.grid_view_outlined),
+                  selectedIcon: Icon(Icons.grid_view_rounded),
+                  label: 'More',
+                ),
+              ],
+            ),
           ),
         );
       },

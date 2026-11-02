@@ -2,22 +2,31 @@ import 'dart:convert';
 import 'dart:math';
 
 import 'package:cryptography/cryptography.dart';
-import 'package:flutter/foundation.dart' show compute;
+import 'package:flutter/foundation.dart' show compute, visibleForTesting;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:local_auth/local_auth.dart';
+
+import '../ui/common.dart' show UpaRentaLogo;
 
 class LockService {
   static const _storage = FlutterSecureStorage(
     aOptions: AndroidOptions(encryptedSharedPreferences: true),
   );
   static final changed = ValueNotifier<int>(0);
-  static final _kdf = Pbkdf2(
-    macAlgorithm: Hmac.sha256(),
-    iterations: 120000,
-    bits: 256,
-  );
+
+  @visibleForTesting
+  static DateTime Function()? debugClock;
+
+  @visibleForTesting
+  static LocalAuthentication Function()? debugAuthFactory;
+
+  @visibleForTesting
+  static int debugIterations = 120000;
+
+  static DateTime now() => debugClock?.call() ?? DateTime.now();
+
   static Future<bool> isEnabled() async =>
       await _storage.read(key: 'pin_record') != null;
   static Future<bool> biometricsEnabled() async =>
@@ -32,6 +41,7 @@ class LockService {
     final hash = await compute(_derivePinHash, {
       'pin': pin,
       'salt': base64Encode(salt),
+      'iterations': '$debugIterations',
     });
     // Keep salt and hash in one secure-storage write. Interrupted PIN changes
     // must not leave a new salt paired with the previous hash.
@@ -40,6 +50,7 @@ class LockService {
       value: jsonEncode({
         'salt': base64Encode(salt),
         'hash': base64Encode(hash),
+        'iterations': debugIterations,
       }),
     );
     await _storage.delete(key: 'pin_failures');
@@ -61,7 +72,8 @@ class LockService {
 
   static Future<void> setBiometrics(bool enabled) async {
     if (enabled) {
-      final authentication = LocalAuthentication();
+      final authentication =
+          debugAuthFactory?.call() ?? LocalAuthentication();
       if (!(await authentication.canCheckBiometrics) ||
           (await authentication.getAvailableBiometrics()).isEmpty) {
         throw const FormatException(
@@ -76,10 +88,10 @@ class LockService {
   static Future<bool> verifyPin(String pin) async {
     final until =
         int.tryParse(await _storage.read(key: 'pin_until') ?? '') ?? 0;
-    final now = DateTime.now().millisecondsSinceEpoch;
-    if (until > now) {
+    final currentMs = now().millisecondsSinceEpoch;
+    if (until > currentMs) {
       throw FormatException(
-        'Please wait ${((until - now) / 1000).ceil()} seconds before trying again.',
+        'Please wait ${((until - currentMs) / 1000).ceil()} seconds before trying again.',
       );
     }
     final serialized = await _storage.read(key: 'pin_record');
@@ -87,7 +99,12 @@ class LockService {
     final record = jsonDecode(serialized) as Map<String, dynamic>;
     final stored = record['hash'] as String;
     final salt = record['salt'] as String;
-    final actual = await compute(_derivePinHash, {'pin': pin, 'salt': salt});
+    final iterations = (record['iterations'] as int?) ?? 120000;
+    final actual = await compute(_derivePinHash, {
+      'pin': pin,
+      'salt': salt,
+      'iterations': '$iterations',
+    });
     final expected = base64Decode(stored);
     var difference = actual.length ^ expected.length;
     for (var i = 0; i < min(actual.length, expected.length); i++) {
@@ -103,15 +120,19 @@ class LockService {
     await _storage.write(key: 'pin_failures', value: '$failures');
     if (failures >= 5) {
       final seconds = min(1800, 30 * (1 << min(6, failures - 5)));
-      await _storage.write(key: 'pin_until', value: '${now + seconds * 1000}');
+      await _storage.write(
+        key: 'pin_until',
+        value: '${currentMs + seconds * 1000}',
+      );
     }
     return false;
   }
 
   static Future<bool> authenticateBiometric() async {
     if (!await biometricsEnabled()) return false;
-    final result = await LocalAuthentication().authenticate(
-      localizedReason: 'Unlock your rental records',
+    final auth = debugAuthFactory?.call() ?? LocalAuthentication();
+    final result = await auth.authenticate(
+      localizedReason: 'Unlock your Upa Renta records',
       options: const AuthenticationOptions(
         biometricOnly: true,
         stickyAuth: true,
@@ -144,7 +165,13 @@ class LockService {
 }
 
 Future<List<int>> _derivePinHash(Map<String, String> values) async {
-  final key = await LockService._kdf.deriveKeyFromPassword(
+  final iterations = int.tryParse(values['iterations'] ?? '') ?? 120000;
+  final kdf = Pbkdf2(
+    macAlgorithm: Hmac.sha256(),
+    iterations: iterations,
+    bits: 256,
+  );
+  final key = await kdf.deriveKeyFromPassword(
     password: values['pin']!,
     nonce: base64Decode(values['salt']!),
   );
@@ -198,12 +225,12 @@ class _AppLockState extends State<AppLock> with WidgetsBindingObserver {
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.paused ||
         state == AppLifecycleState.hidden) {
-      _backgroundAt ??= DateTime.now();
+      _backgroundAt ??= LockService.now();
     }
     if (state == AppLifecycleState.resumed) {
       if (_enabled &&
           _backgroundAt != null &&
-          DateTime.now().difference(_backgroundAt!) >=
+          LockService.now().difference(_backgroundAt!) >=
               const Duration(seconds: 30)) {
         setState(() => _locked = true);
       }
@@ -329,9 +356,9 @@ class _UnlockFormState extends State<_UnlockForm> {
   Widget build(BuildContext context) => Column(
     mainAxisSize: MainAxisSize.min,
     children: [
-      const Icon(Icons.lock_outline_rounded, size: 56),
-      const SizedBox(height: 24),
-      Text('Welcome back', style: Theme.of(context).textTheme.headlineMedium),
+      const UpaRentaLogo(size: 58),
+      const SizedBox(height: 20),
+      Text('Upa Renta', style: Theme.of(context).textTheme.headlineMedium),
       const SizedBox(height: 8),
       const Text(
         'Enter your PIN to open your rental records.',

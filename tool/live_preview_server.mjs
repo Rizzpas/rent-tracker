@@ -13,8 +13,8 @@ import { fileURLToPath } from 'node:url';
 const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const workspaceId = createHash('sha256').update(projectRoot.toLowerCase()).digest('hex').slice(0, 12);
 const controlPath = process.platform === 'win32'
-  ? `\\\\.\\pipe\\bahay-preview-${workspaceId}`
-  : path.join(os.tmpdir(), `bahay-preview-${workspaceId}.sock`);
+  ? `\\\\.\\pipe\\upa-renta-preview-${workspaceId}`
+  : path.join(os.tmpdir(), `upa-renta-preview-${workspaceId}.sock`);
 const args = process.argv.slice(2);
 const portArg = args.find((arg) => arg.startsWith('--port='));
 const port = portArg ? Number(portArg.split('=')[1]) : 7357;

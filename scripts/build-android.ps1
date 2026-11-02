@@ -32,7 +32,7 @@ $flutter = Join-Path $FlutterSdk 'bin\flutter.bat'
 if ($LASTEXITCODE -ne 0) { throw 'Flutter tool configuration failed.' }
 
 # Create a persistent, private local release identity. Keep this folder for updates.
-$signingDirectory = Join-Path $env:LOCALAPPDATA 'BahayRent\signing'
+$signingDirectory = Join-Path $env:LOCALAPPDATA 'UpaRenta\signing'
 $privateProperties = Join-Path $signingDirectory 'key.properties'
 if (!(Test-Path -LiteralPath $privateProperties)) {
     New-Item -ItemType Directory -Path $signingDirectory -Force | Out-Null
@@ -43,12 +43,12 @@ if (!(Test-Path -LiteralPath $privateProperties)) {
     $rng.GetBytes($randomBytes)
     $rng.Dispose()
     $signingPassword = [Convert]::ToBase64String($randomBytes)
-    $env:BAHAY_KEY_PASSWORD = $signingPassword
+    $env:UPA_KEY_PASSWORD = $signingPassword
     try {
-        & "$JavaHome\bin\keytool.exe" -genkeypair -v -keystore $signingKey -storetype JKS -alias bahay -keyalg RSA -keysize 3072 -validity 10000 -storepass:env BAHAY_KEY_PASSWORD -keypass:env BAHAY_KEY_PASSWORD -dname 'CN=Bahay Rent, OU=Local application, O=Bahay Rent, C=PH'
+        & "$JavaHome\bin\keytool.exe" -genkeypair -v -keystore $signingKey -storetype JKS -alias uparenta -keyalg RSA -keysize 3072 -validity 10000 -storepass:env UPA_KEY_PASSWORD -keypass:env UPA_KEY_PASSWORD -dname 'CN=Upa Renta, OU=Local application, O=Upa Renta, C=PH'
         if ($LASTEXITCODE -ne 0) { throw 'Release signing key creation failed.' }
-        @("storeFile=$($signingKey.Replace('\','/'))", "storePassword=$signingPassword", 'keyAlias=bahay', "keyPassword=$signingPassword") | Set-Content -LiteralPath $privateProperties -Encoding ASCII
-    } finally { Remove-Item Env:\BAHAY_KEY_PASSWORD -ErrorAction SilentlyContinue }
+        @("storeFile=$($signingKey.Replace('\','/'))", "storePassword=$signingPassword", 'keyAlias=uparenta', "keyPassword=$signingPassword") | Set-Content -LiteralPath $privateProperties -Encoding ASCII
+    } finally { Remove-Item Env:\UPA_KEY_PASSWORD -ErrorAction SilentlyContinue }
     $currentIdentity = [System.Security.Principal.WindowsIdentity]::GetCurrent().Name
     & icacls.exe $signingDirectory /inheritance:r /grant:r "${currentIdentity}:(OI)(CI)F" | Out-Null
     if ($LASTEXITCODE -ne 0) { throw 'Could not restrict signing folder permissions.' }
@@ -65,9 +65,11 @@ if (!$SkipChecks) {
 & $flutter build apk --release
 if ($LASTEXITCODE -ne 0) { throw 'Android release build failed.' }
 New-Item -ItemType Directory -Path (Join-Path $projectRoot 'deliverables') -Force | Out-Null
-$apk = Join-Path $projectRoot 'deliverables\Bahay-Rent-1.0.0.apk'
+$apk = Join-Path $projectRoot 'deliverables\Upa-Renta-1.0.0.apk'
+$legacyApk = Join-Path $projectRoot 'deliverables\Bahay-Rent-1.0.0.apk'
+if (Test-Path -LiteralPath $legacyApk) { Remove-Item -LiteralPath $legacyApk -Force }
 Copy-Item -LiteralPath (Join-Path $projectRoot 'build\app\outputs\flutter-apk\app-release.apk') -Destination $apk -Force
 $hash = (Get-FileHash -LiteralPath $apk -Algorithm SHA256).Hash.ToLowerInvariant()
-"$hash  Bahay-Rent-1.0.0.apk" | Set-Content -LiteralPath (Join-Path $projectRoot 'deliverables\SHA256SUMS.txt') -Encoding ASCII
+"$hash  Upa-Renta-1.0.0.apk" | Set-Content -LiteralPath (Join-Path $projectRoot 'deliverables\SHA256SUMS.txt') -Encoding ASCII
 Write-Output "APK: $apk"
 Write-Output "Keep a private backup of your release signing folder: $signingDirectory"

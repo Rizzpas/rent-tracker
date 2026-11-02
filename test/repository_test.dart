@@ -1,8 +1,8 @@
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:bahay_rent/data/models.dart';
-import 'package:bahay_rent/data/repository.dart';
+import 'package:upa_renta/data/models.dart';
+import 'package:upa_renta/data/repository.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
@@ -763,5 +763,99 @@ void main() {
       await persistent.close();
       await directory.delete(recursive: true);
     }
+  });
+
+  test(
+    'saveDraft auto-resolves 5th, 15th, 30th, and end-of-month due dates including February',
+    () async {
+      final scheduleExpectations = <int, Map<String, String>>{
+        5: {
+          '2026-01': '2026-01-05',
+          '2026-02': '2026-02-05',
+          '2028-02': '2028-02-05',
+          '2026-04': '2026-04-05',
+        },
+        15: {
+          '2026-01': '2026-01-15',
+          '2026-02': '2026-02-15',
+          '2028-02': '2028-02-15',
+          '2026-04': '2026-04-15',
+        },
+        30: {
+          '2026-01': '2026-01-30',
+          '2026-02': '2026-02-28',
+          '2028-02': '2028-02-29',
+          '2026-04': '2026-04-30',
+        },
+        31: {
+          '2026-01': '2026-01-31',
+          '2026-02': '2026-02-28',
+          '2028-02': '2028-02-29',
+          '2026-04': '2026-04-30',
+        },
+      };
+
+      for (final entry in scheduleExpectations.entries) {
+        final dueDay = entry.key;
+        final roomId = await room(
+          name: 'Schedule Room $dueDay',
+          electricityMode: 'fixed',
+          electricityRate: 10000,
+          waterMode: 'fixed',
+          waterRate: 5000,
+        );
+        final tenancyId = await repository.assignTenant(
+          roomId: roomId,
+          name: 'Tenant $dueDay',
+          phone: '',
+          moveIn: '2026-01-01',
+          rentCents: 500000,
+          depositCents: 0,
+          dueDay: dueDay,
+        );
+        for (final periodEntry in entry.value.entries) {
+          final invoiceId = await repository.saveDraft(
+            tenancyId: tenancyId,
+            period: periodEntry.key,
+          );
+          final data = await repository.load();
+          expect(
+            data.invoice(invoiceId)!['due_date'],
+            periodEntry.value,
+            reason: 'dueDay=$dueDay in period=${periodEntry.key}',
+          );
+        }
+      }
+    },
+  );
+
+  test(
+    'backup exports upa-renta-backup format and restores legacy bahay-rent-backup',
+    () async {
+      await room(name: 'Compat Room');
+      final exported = await repository.exportData();
+      expect(exported['format'], 'upa-renta-backup');
+      await repository.validateBackup(exported);
+
+      final legacy = clone(exported)..['format'] = 'bahay-rent-backup';
+      await repository.validateBackup(legacy);
+      await repository.restoreData(legacy);
+      expect((await repository.load()).rooms.single['name'], 'Compat Room');
+    },
+  );
+
+  test('meter_day setting supports 1..31 including 30th and end-of-month', () async {
+    await repository.saveSettings({'meter_day': '30'});
+    expect((await repository.load()).settings['meter_day'], '30');
+    await repository.saveSettings({'meter_day': '31'});
+    expect((await repository.load()).settings['meter_day'], '31');
+    await expectLater(
+      repository.saveSettings({'meter_day': '0'}),
+      throwsStateError,
+    );
+    await expectLater(
+      repository.saveSettings({'meter_day': '32'}),
+      throwsStateError,
+    );
   });
 }

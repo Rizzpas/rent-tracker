@@ -260,15 +260,35 @@ class _MorePageState extends State<MorePage> {
 
   Future<void> _toggleReminders(bool enabled) async {
     if (!_allowPlatformAction()) return;
-    await _run(() async {
-      if (enabled && !await ReminderService.requestPermission()) {
-        throw const FormatException(
-          'Notifications are not permitted. Enable them in your phone’s app settings, then try again.',
-        );
-      }
-      await widget.repository.saveSettings({'reminders': '$enabled'});
-      await ReminderService.reschedule(await widget.repository.load());
-    });
+    await _run(
+      () async {
+        if (enabled && !await ReminderService.requestPermission()) {
+          throw const FormatException(
+            'Notifications are not permitted. Enable them in your phone’s app settings, then try again.',
+          );
+        }
+        await widget.repository.saveSettings({'reminders': '$enabled'});
+        await ReminderService.reschedule(await widget.repository.load());
+      },
+      success: enabled
+          ? 'Local reminders enabled in Asia/Manila time.'
+          : 'Local reminders turned off.',
+    );
+  }
+
+  Future<void> _testNotification() async {
+    if (!_allowPlatformAction()) return;
+    await _run(
+      () async {
+        if (!await ReminderService.requestPermission()) {
+          throw const FormatException(
+            'Notifications are not permitted. Enable them in your phone’s app settings first.',
+          );
+        }
+        await ReminderService.sendTestNotification(widget.data);
+      },
+      success: 'Test notification sent! Check your phone’s status bar.',
+    );
   }
 
   Future<void> _meterDay() async {
@@ -279,17 +299,15 @@ class _MorePageState extends State<MorePage> {
       context,
       title: 'Monthly meter reminder',
       description:
-          'Choose a day from 1 to 28. Reminders are delivered around 9 AM, Manila time.',
-      fields: (_, setState) => input(
-        day,
-        'Day of the month',
-        keyboard: TextInputType.number,
-        required: true,
+          'Choose any day from 1 to 31 (including 30th or End of month). Reminders are delivered around 9 AM, Asia/Manila time.',
+      fields: (_, setState) => DueDaySelector(
+        controller: day,
+        label: 'Meter reading day (1–31)',
       ),
       onSave: () async {
         final value = int.tryParse(day.text);
-        if (value == null || value < 1 || value > 28) {
-          throw const FormatException('Choose a day from 1 to 28.');
+        if (value == null || value < 1 || value > 31) {
+          throw const FormatException('Choose a day from 1 to 31.');
         }
         await widget.repository.saveSettings({'meter_day': '$value'});
         if (widget.enablePlatformServices) {
@@ -302,233 +320,246 @@ class _MorePageState extends State<MorePage> {
   }
 
   @override
-  Widget build(BuildContext context) => Column(
-    crossAxisAlignment: CrossAxisAlignment.stretch,
-    children: [
-      const PageHeader(
-        eyebrow: 'Your property, in your hands',
-        title: 'More',
-        subtitle: 'Reports, settings, and a safe copy of your records.',
-      ),
-      SectionCard(
-        color: Theme.of(context).brightness == Brightness.dark
-            ? const Color(0xff243a32)
-            : const Color(0xffe7eee2),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Icon(
-              Icons.cloud_off_outlined,
-              color: Theme.of(context).colorScheme.primary,
-              size: 30,
-            ),
-            const SizedBox(height: 12),
-            Text(
-              'Your records stay with you',
-              style: Theme.of(context).textTheme.titleLarge,
-            ),
-            const SizedBox(height: 8),
-            const Text(
-              'Everything works without internet. Save a backup outside this app regularly, especially before changing phones.',
-              style: TextStyle(height: 1.5),
-            ),
-            const SizedBox(height: 14),
-            Text(
-              'Last saved backup: ${_lastBackup()}',
-              style: const TextStyle(fontWeight: FontWeight.w600),
-            ),
-            const SizedBox(height: 16),
-            Wrap(
-              spacing: 10,
-              runSpacing: 10,
-              children: [
-                FilledButton.icon(
-                  onPressed: _busy ? null : _backup,
-                  icon: const Icon(Icons.save_alt_rounded),
-                  label: const Text('Save backup'),
-                ),
-                OutlinedButton.icon(
-                  onPressed: _busy ? null : _restore,
-                  icon: const Icon(Icons.restore_rounded),
-                  label: const Text('Restore'),
-                ),
-              ],
-            ),
-            if (_hasSafetyCopy)
-              TextButton.icon(
-                onPressed: _busy ? null : () => _backup(safetyCopy: true),
-                icon: const Icon(Icons.history_rounded),
-                label: const Text('Save pre-restore safety copy'),
+  Widget build(BuildContext context) {
+    final meterDayNum =
+        int.tryParse(widget.data.settings['meter_day'] ?? '25') ?? 25;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const PageHeader(
+          eyebrow: 'Your property, in your hands',
+          title: 'More',
+          subtitle: 'Reports, settings, and a safe copy of your records.',
+        ),
+        SectionCard(
+          color: Theme.of(context).brightness == Brightness.dark
+              ? const Color(0xFF21362E)
+              : const Color(0xFFE7EFE3),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Icon(
+                Icons.cloud_off_outlined,
+                color: Theme.of(context).colorScheme.primary,
+                size: 30,
               ),
-            TextButton(
-              onPressed: () => showDetails(
-                context,
-                title: 'Keep a safe copy',
-                children: const [
-                  Text(
-                    '1. Tap Save backup and choose a folder outside the app, such as Downloads or an attached USB drive.\n\n'
-                    '2. Keep another copy on a separate device. A backup inside your phone alone cannot protect you if the phone is lost.\n\n'
-                    '3. To restore, install Bahay Rent, open More → Restore, and select your .brbackup file. Enter the backup password if needed.\n\n'
-                    '4. Review the file date and record counts. Confirm replacement only when you are ready. Current records are not merged.\n\n'
-                    'After restoring, Save pre-restore safety copy lets you export the records that were on this phone before the latest restore.\n\n'
-                    'Backups contain your property, room, tenant, billing, payment, deposit, settings, and audit records. Your app PIN stays on this device.',
+              const SizedBox(height: 12),
+              Text(
+                'Your records stay with you',
+                style: Theme.of(context).textTheme.titleLarge,
+              ),
+              const SizedBox(height: 8),
+              const Text(
+                'Everything works without internet. Save a backup outside this app regularly, especially before changing phones.',
+                style: TextStyle(height: 1.5),
+              ),
+              const SizedBox(height: 14),
+              Text(
+                'Last saved backup: ${_lastBackup()}',
+                style: const TextStyle(fontWeight: FontWeight.w600),
+              ),
+              const SizedBox(height: 16),
+              Wrap(
+                spacing: 10,
+                runSpacing: 10,
+                children: [
+                  FilledButton.icon(
+                    onPressed: _busy ? null : _backup,
+                    icon: const Icon(Icons.save_alt_rounded),
+                    label: const Text('Save backup'),
+                  ),
+                  OutlinedButton.icon(
+                    onPressed: _busy ? null : _restore,
+                    icon: const Icon(Icons.restore_rounded),
+                    label: const Text('Restore'),
                   ),
                 ],
               ),
-              child: const Text('Backup and restore instructions'),
-            ),
-          ],
-        ),
-      ),
-      const SizedBox(height: 24),
-      _label('Your records'),
-      SectionCard(
-        padding: EdgeInsets.zero,
-        child: Column(
-          children: [
-            _tile(
-              Icons.assessment_outlined,
-              'Reports & exports',
-              'Monthly and yearly totals, CSV and PDF',
-              () =>
-                  _push(_ReportsPage(data: widget.data, period: widget.period)),
-            ),
-            _tile(
-              Icons.history_rounded,
-              'Bills & payment history',
-              'All months, including reversed payments',
-              () => _push(_HistoryPage(data: widget.data)),
-            ),
-            _tile(
-              Icons.people_outline_rounded,
-              'Tenancy & deposit history',
-              'Move-ins, move-outs, refunds, deductions',
-              () => _push(_TenancyHistoryPage(data: widget.data)),
-            ),
-            _tile(
-              Icons.fact_check_outlined,
-              'Activity & corrections',
-              'A record of financial changes',
-              () => _push(_AuditPage(data: widget.data)),
-            ),
-          ],
-        ),
-      ),
-      const SizedBox(height: 24),
-      _label('Property & preferences'),
-      SectionCard(
-        padding: EdgeInsets.zero,
-        child: Column(
-          children: [
-            _tile(
-              Icons.home_work_outlined,
-              widget.data.settings['property_name'] ?? 'Your property',
-              'Property details for statements and receipts',
-              _profile,
-            ),
-            SwitchListTile(
-              contentPadding: const EdgeInsets.symmetric(
-                horizontal: 20,
-                vertical: 6,
-              ),
-              secondary: const Icon(Icons.dark_mode_outlined),
-              title: const Text('Dark mode'),
-              value: widget.data.settings['dark_mode'] == 'true',
-              onChanged: _busy
-                  ? null
-                  : (value) => _run(
-                      () => widget.repository.saveSettings({
-                        'dark_mode': '$value',
-                      }),
+              if (_hasSafetyCopy)
+                TextButton.icon(
+                  onPressed: _busy ? null : () => _backup(safetyCopy: true),
+                  icon: const Icon(Icons.history_rounded),
+                  label: const Text('Save pre-restore safety copy'),
+                ),
+              TextButton(
+                onPressed: () => showDetails(
+                  context,
+                  title: 'Keep a safe copy',
+                  children: const [
+                    Text(
+                      '1. Tap Save backup and choose a folder outside the app, such as Downloads or an attached USB drive.\n\n'
+                      '2. Keep another copy on a separate device. A backup inside your phone alone cannot protect you if the phone is lost.\n\n'
+                      '3. To restore, install Upa Renta, open More → Restore, and select your .urbackup (or legacy .brbackup) file. Enter the backup password if needed.\n\n'
+                      '4. Review the file date and record counts. Confirm replacement only when you are ready. Current records are not merged.\n\n'
+                      'After restoring, Save pre-restore safety copy lets you export the records that were on this phone before the latest restore.\n\n'
+                      'Backups contain your property, room, tenant, billing, payment, deposit, settings, and audit records. Your app PIN stays on this device.',
                     ),
-            ),
-            SwitchListTile(
-              contentPadding: const EdgeInsets.symmetric(
-                horizontal: 20,
-                vertical: 6,
+                  ],
+                ),
+                child: const Text('Backup and restore instructions'),
               ),
-              secondary: const Icon(Icons.notifications_none_rounded),
-              title: const Text('Local reminders'),
-              subtitle: const Text(
-                'Due dates, overdue bills, drafts, and meters',
-              ),
-              value: widget.data.settings['reminders'] == 'true',
-              onChanged: _busy ? null : _toggleReminders,
-            ),
-            _tile(
-              Icons.event_repeat_outlined,
-              'Meter reading day',
-              'Day ${widget.data.settings['meter_day'] ?? '25'} of each month · around 9 AM',
-              _meterDay,
-            ),
-          ],
+            ],
+          ),
         ),
-      ),
-      const SizedBox(height: 24),
-      _label('Privacy & security'),
-      SectionCard(
-        padding: EdgeInsets.zero,
-        child: Column(
-          children: [
-            if (_securityError != null)
-              Padding(
-                padding: const EdgeInsets.all(20),
-                child: Text(
-                  _securityError!,
-                  style: const TextStyle(color: danger),
+        const SizedBox(height: 24),
+        _label('Your records'),
+        SectionCard(
+          padding: EdgeInsets.zero,
+          child: Column(
+            children: [
+              _tile(
+                Icons.assessment_outlined,
+                'Reports & exports',
+                'Monthly and yearly totals, CSV and PDF',
+                () => _push(
+                  _ReportsPage(data: widget.data, period: widget.period),
                 ),
               ),
-            _tile(
-              Icons.pin_outlined,
-              _pin ? 'Change app PIN' : 'Set up app PIN',
-              _pin
-                  ? '6-digit PIN is enabled'
-                  : 'Optional protection on this phone',
-              _setPin,
-            ),
-            if (_pin) ...[
+              _tile(
+                Icons.history_rounded,
+                'Bills & payment history',
+                'All months, including reversed payments',
+                () => _push(_HistoryPage(data: widget.data)),
+              ),
+              _tile(
+                Icons.people_outline_rounded,
+                'Tenancy & deposit history',
+                'Move-ins, move-outs, refunds, deductions',
+                () => _push(_TenancyHistoryPage(data: widget.data)),
+              ),
+              _tile(
+                Icons.fact_check_outlined,
+                'Activity & corrections',
+                'A record of financial changes',
+                () => _push(_AuditPage(data: widget.data)),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 24),
+        _label('Property & preferences'),
+        SectionCard(
+          padding: EdgeInsets.zero,
+          child: Column(
+            children: [
+              _tile(
+                Icons.home_work_outlined,
+                widget.data.settings['property_name'] ?? 'Your property',
+                'Property details for statements and receipts',
+                _profile,
+              ),
               SwitchListTile(
                 contentPadding: const EdgeInsets.symmetric(
                   horizontal: 20,
                   vertical: 6,
                 ),
-                secondary: const Icon(Icons.fingerprint),
-                title: const Text('Fingerprint or face unlock'),
-                subtitle: const Text(
-                  'Use biometrics already set up on your phone',
-                ),
-                value: _biometrics,
+                secondary: const Icon(Icons.dark_mode_outlined),
+                title: const Text('Dark mode'),
+                value: widget.data.settings['dark_mode'] == 'true',
                 onChanged: _busy
                     ? null
-                    : (value) => _run(() async {
-                        if (!_allowPlatformAction()) return;
-                        if (!await LockService.confirmIdentity(context)) return;
-                        await LockService.setBiometrics(value);
-                        await _loadSecurity();
-                      }),
+                    : (value) => _run(
+                        () => widget.repository.saveSettings({
+                          'dark_mode': '$value',
+                        }),
+                      ),
+              ),
+              SwitchListTile(
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 20,
+                  vertical: 6,
+                ),
+                secondary: const Icon(Icons.notifications_none_rounded),
+                title: const Text('Local reminders'),
+                subtitle: const Text(
+                  'Due dates, overdue bills, drafts, and meters',
+                ),
+                value: widget.data.settings['reminders'] == 'true',
+                onChanged: _busy ? null : _toggleReminders,
               ),
               _tile(
-                Icons.lock_open_outlined,
-                'Turn off app lock',
-                'Requires your current PIN or biometrics',
-                _disablePin,
+                Icons.notifications_active_outlined,
+                'Send test notification',
+                'Check that reminders appear on this phone',
+                _testNotification,
+              ),
+              _tile(
+                Icons.event_repeat_outlined,
+                'Meter reading day',
+                '${dueDayLabel(meterDayNum)} · around 9 AM Manila time',
+                _meterDay,
               ),
             ],
-          ],
+          ),
         ),
-      ),
-      const SizedBox(height: 24),
-      if (_busy) const LinearProgressIndicator(),
-      const Padding(
-        padding: EdgeInsets.only(top: 16, bottom: 8),
-        child: Text(
-          'BAHAY RENT  1.0\nMade for everyday rental care.\nPhilippine pesos · Asia/Manila · No online account',
-          textAlign: TextAlign.center,
-          style: TextStyle(color: muted, fontSize: 12, height: 1.8),
+        const SizedBox(height: 24),
+        _label('Privacy & security'),
+        SectionCard(
+          padding: EdgeInsets.zero,
+          child: Column(
+            children: [
+              if (_securityError != null)
+                Padding(
+                  padding: const EdgeInsets.all(20),
+                  child: Text(
+                    _securityError!,
+                    style: const TextStyle(color: danger),
+                  ),
+                ),
+              _tile(
+                Icons.pin_outlined,
+                _pin ? 'Change app PIN' : 'Set up app PIN',
+                _pin
+                    ? '6-digit PIN is enabled'
+                    : 'Optional protection on this phone',
+                _setPin,
+              ),
+              if (_pin) ...[
+                SwitchListTile(
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 20,
+                    vertical: 6,
+                  ),
+                  secondary: const Icon(Icons.fingerprint),
+                  title: const Text('Fingerprint or face unlock'),
+                  subtitle: const Text(
+                    'Use biometrics already set up on your phone',
+                  ),
+                  value: _biometrics,
+                  onChanged: _busy
+                      ? null
+                      : (value) => _run(() async {
+                          if (!_allowPlatformAction()) return;
+                          if (!await LockService.confirmIdentity(context)) {
+                            return;
+                          }
+                          await LockService.setBiometrics(value);
+                          await _loadSecurity();
+                        }),
+                ),
+                _tile(
+                  Icons.lock_open_outlined,
+                  'Turn off app lock',
+                  'Requires your current PIN or biometrics',
+                  _disablePin,
+                ),
+              ],
+            ],
+          ),
         ),
-      ),
-    ],
-  );
+        const SizedBox(height: 24),
+        if (_busy) const LinearProgressIndicator(),
+        const Padding(
+          padding: EdgeInsets.only(top: 16, bottom: 8),
+          child: Text(
+            'UPA RENTA  1.0\nMade for everyday rental care.\nPhilippine pesos · Asia/Manila · 100% offline',
+            textAlign: TextAlign.center,
+            style: TextStyle(color: muted, fontSize: 12, height: 1.8),
+          ),
+        ),
+      ],
+    );
+  }
 
   String _lastBackup() {
     final input = widget.data.settings['last_backup'] ?? '';
@@ -622,6 +653,7 @@ class _ReportsPageState extends State<_ReportsPage> {
           const SizedBox(height: 16),
           if (_range != 'all')
             SectionCard(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
               child: Row(
                 children: [
                   IconButton(
@@ -630,10 +662,27 @@ class _ReportsPageState extends State<_ReportsPage> {
                     onPressed: () => _shift(-1),
                   ),
                   Expanded(
-                    child: Text(
-                      _range == 'month' ? monthLabel(_period) : '$_year',
-                      textAlign: TextAlign.center,
-                      style: const TextStyle(fontWeight: FontWeight.w700),
+                    child: InkWell(
+                      borderRadius: BorderRadius.circular(12),
+                      onTap: _range == 'month'
+                          ? () async {
+                              final picked = await showUpaMonthPicker(
+                                context,
+                                initialPeriod: _period,
+                              );
+                              if (picked != null) {
+                                setState(() => _period = picked);
+                              }
+                            }
+                          : null,
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 10),
+                        child: Text(
+                          _range == 'month' ? monthLabel(_period) : '$_year',
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(fontWeight: FontWeight.w700),
+                        ),
+                      ),
                     ),
                   ),
                   IconButton(
@@ -656,8 +705,11 @@ class _ReportsPageState extends State<_ReportsPage> {
               ),
               ...widget.data.rooms.map(
                 (r) => DropdownMenuItem<int>(
-                  value: r['id'],
-                  child: Text(r['name'], overflow: TextOverflow.ellipsis),
+                  value: r['id'] as int,
+                  child: Text(
+                    r['name'] as String,
+                    overflow: TextOverflow.ellipsis,
+                  ),
                 ),
               ),
             ],
@@ -675,8 +727,11 @@ class _ReportsPageState extends State<_ReportsPage> {
               ),
               ...widget.data.tenants.map(
                 (t) => DropdownMenuItem<int>(
-                  value: t['id'],
-                  child: Text(t['name'], overflow: TextOverflow.ellipsis),
+                  value: t['id'] as int,
+                  child: Text(
+                    t['name'] as String,
+                    overflow: TextOverflow.ellipsis,
+                  ),
                 ),
               ),
             ],
@@ -750,8 +805,9 @@ class _ReportsPageState extends State<_ReportsPage> {
 
   void _shift(int delta) => setState(() {
     if (_range == 'month') {
-      final date = DateTime.parse('$_period-01');
-      final changed = DateTime(date.year, date.month + delta);
+      final y = int.parse(_period.substring(0, 4));
+      final m = int.parse(_period.substring(5, 7));
+      final changed = DateTime.utc(y, m + delta, 1);
       if (changed.year >= 2000 && changed.year <= 2100) {
         _period = billingPeriod(changed);
       }
@@ -805,135 +861,166 @@ class _HistoryPageState extends State<_HistoryPage> {
   @override
   Widget build(BuildContext context) {
     final data = widget.data;
-    final bills =
-        data.invoices
-            .where(
-              (b) =>
-                  '${b['reference']} ${b['period']} ${data.room(b['room_id'])?['name']} ${data.tenantName(b['tenancy_id'])}'
-                      .toLowerCase()
-                      .contains(_search),
-            )
-            .toList()
-          ..sort(
-            (a, b) => (b['period'] as String).compareTo(a['period'] as String),
-          );
-    final payments =
-        data.payments
-            .where(
-              (p) =>
-                  '${p['date']} ${p['method']} ${p['reference']} ${p['notes']} RCP-${p['id'].toString().padLeft(6, '0')} ${_paymentTenant(data, p['id'])}'
-                      .toLowerCase()
-                      .contains(_search),
-            )
-            .toList()
-          ..sort(
-            (a, b) => (b['date'] as String).compareTo(a['date'] as String),
-          );
+    final items = _bills
+        ? (data.invoices
+                .where(
+                  (b) =>
+                      _search.isEmpty ||
+                      '${b['reference']} ${b['period']} ${data.room(b['room_id'] as int)?['name']} ${data.tenantName(b['tenancy_id'] as int)}'
+                          .toLowerCase()
+                          .contains(_search),
+                )
+                .toList()
+              ..sort(
+                (a, b) =>
+                    (b['period'] as String).compareTo(a['period'] as String),
+              ))
+        : (data.payments
+                .where(
+                  (p) =>
+                      _search.isEmpty ||
+                      '${p['date']} ${p['method']} ${p['reference']} ${p['notes']} RCP-${p['id'].toString().padLeft(6, '0')} ${_paymentTenant(data, p['id'] as int)}'
+                          .toLowerCase()
+                          .contains(_search),
+                )
+                .toList()
+              ..sort(
+                (a, b) => (b['date'] as String).compareTo(a['date'] as String),
+              ));
+
     return Scaffold(
       appBar: AppBar(title: const Text('Bills & payment history')),
-      body: ListView(
-        padding: const EdgeInsets.all(24),
-        children: [
-          TextField(
-            decoration: const InputDecoration(
-              labelText: 'Search name, room, month, or reference',
-              prefixIcon: Icon(Icons.search),
-            ),
-            onChanged: (v) => setState(() => _search = v.toLowerCase().trim()),
-          ),
-          const SizedBox(height: 16),
-          Wrap(
-            spacing: 12,
-            children: [
-              ChoiceChip(
-                label: const Text('Bills'),
-                selected: _bills,
-                onSelected: (_) => setState(() => _bills = true),
-              ),
-              ChoiceChip(
-                label: const Text('Payments'),
-                selected: !_bills,
-                onSelected: (_) => setState(() => _bills = false),
-              ),
-            ],
-          ),
-          const SizedBox(height: 20),
-          if (_bills && bills.isEmpty || !_bills && payments.isEmpty)
-            const EmptyState(
-              icon: Icons.history_rounded,
-              title: 'No matching records',
-              description: 'Saved bills and payments will appear here.',
-            ),
-          if (_bills)
-            ...bills.map(
-              (b) => Padding(
-                padding: const EdgeInsets.only(bottom: 12),
-                child: SectionCard(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+      body: CustomScrollView(
+        slivers: [
+          SliverPadding(
+            padding: const EdgeInsets.fromLTRB(24, 24, 24, 20),
+            sliver: SliverToBoxAdapter(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  TextField(
+                    decoration: const InputDecoration(
+                      labelText: 'Search name, room, month, or reference',
+                      prefixIcon: Icon(Icons.search),
+                    ),
+                    onChanged: (v) =>
+                        setState(() => _search = v.toLowerCase().trim()),
+                  ),
+                  const SizedBox(height: 16),
+                  Wrap(
+                    spacing: 12,
                     children: [
-                      Text(
-                        '${data.room(b['room_id'])?['name']} · ${b['period']}',
-                        style: const TextStyle(fontWeight: FontWeight.w700),
+                      ChoiceChip(
+                        label: const Text('Bills'),
+                        selected: _bills,
+                        onSelected: (_) => setState(() => _bills = true),
                       ),
-                      const SizedBox(height: 6),
-                      Text(data.tenantName(b['tenancy_id'])),
-                      const SizedBox(height: 10),
-                      StatusPill(invoiceStatus(data, b)),
-                      DetailRow('Reference', b['reference']),
-                      DetailRow('Charges', money(b['total_cents'])),
-                      DetailRow('Balance', money(data.balance(b['id']))),
-                      OutlinedButton.icon(
-                        onPressed: () => perform(
-                          context,
-                          () => DocumentService.statement(data, b['id']),
-                        ),
-                        icon: const Icon(Icons.description_outlined),
-                        label: const Text('View statement'),
+                      ChoiceChip(
+                        label: const Text('Payments'),
+                        selected: !_bills,
+                        onSelected: (_) => setState(() => _bills = false),
                       ),
                     ],
                   ),
-                ),
+                ],
               ),
             ),
-          if (!_bills)
-            ...payments.map(
-              (p) => Padding(
-                padding: const EdgeInsets.only(bottom: 12),
-                child: SectionCard(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'RCP-${p['id'].toString().padLeft(6, '0')}',
-                        style: const TextStyle(fontWeight: FontWeight.w700),
-                      ),
-                      Text(_paymentTenant(data, p['id'])),
-                      DetailRow(
-                        '${dateLabel(p['date'])} · ${p['method']}',
-                        money(p['amount_cents']),
-                        strong: true,
-                      ),
-                      if (p['reversed_at'] != null)
-                        Text(
-                          'Reversed · ${p['reversal_reason']}',
-                          style: const TextStyle(color: danger),
-                        ),
-                      if ((p['reference'] as String).isNotEmpty)
-                        Text('Reference: ${p['reference']}'),
-                      if ((p['notes'] as String).isNotEmpty) Text(p['notes']),
-                      const SizedBox(height: 12),
-                      OutlinedButton.icon(
-                        onPressed: () => perform(
-                          context,
-                          () => DocumentService.receipt(data, p['id']),
-                        ),
-                        icon: const Icon(Icons.receipt_long_outlined),
-                        label: const Text('View receipt'),
-                      ),
-                    ],
-                  ),
+          ),
+          if (items.isEmpty)
+            const SliverPadding(
+              padding: EdgeInsets.symmetric(horizontal: 24),
+              sliver: SliverToBoxAdapter(
+                child: EmptyState(
+                  icon: Icons.history_rounded,
+                  title: 'No matching records',
+                  description: 'Saved bills and payments will appear here.',
                 ),
+              ),
+            )
+          else
+            SliverPadding(
+              padding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
+              sliver: SliverList.builder(
+                itemCount: items.length,
+                itemBuilder: (context, index) {
+                  final row = items[index];
+                  if (_bills) {
+                    final id = row['id'] as int;
+                    return Padding(
+                      padding: const EdgeInsets.only(bottom: 12),
+                      child: SectionCard(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              '${data.room(row['room_id'] as int)?['name']} · ${row['period']}',
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                            const SizedBox(height: 6),
+                            Text(data.tenantName(row['tenancy_id'] as int)),
+                            const SizedBox(height: 10),
+                            StatusPill(invoiceStatus(data, row)),
+                            DetailRow('Reference', row['reference'] as String),
+                            DetailRow(
+                              'Charges',
+                              money(row['total_cents'] as int),
+                            ),
+                            DetailRow('Balance', money(data.balance(id))),
+                            OutlinedButton.icon(
+                              onPressed: () => perform(
+                                context,
+                                () => DocumentService.statement(data, id),
+                              ),
+                              icon: const Icon(Icons.description_outlined),
+                              label: const Text('View statement'),
+                            ),
+                          ],
+                        ),
+                      ),
+                    );
+                  }
+                  final id = row['id'] as int;
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: 12),
+                    child: SectionCard(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'RCP-${id.toString().padLeft(6, '0')}',
+                            style: const TextStyle(fontWeight: FontWeight.w700),
+                          ),
+                          Text(_paymentTenant(data, id)),
+                          DetailRow(
+                            '${dateLabel(row['date'] as String)} · ${row['method']}',
+                            money(row['amount_cents'] as int),
+                            strong: true,
+                          ),
+                          if (row['reversed_at'] != null)
+                            Text(
+                              'Reversed · ${row['reversal_reason']}',
+                              style: const TextStyle(color: danger),
+                            ),
+                          if ((row['reference'] as String).isNotEmpty)
+                            Text('Reference: ${row['reference']}'),
+                          if ((row['notes'] as String).isNotEmpty)
+                            Text(row['notes'] as String),
+                          const SizedBox(height: 12),
+                          OutlinedButton.icon(
+                            onPressed: () => perform(
+                              context,
+                              () => DocumentService.receipt(data, id),
+                            ),
+                            icon: const Icon(Icons.receipt_long_outlined),
+                            label: const Text('View receipt'),
+                          ),
+                        ],
+                      ),
+                    ),
+                  );
+                },
               ),
             ),
         ],
@@ -942,15 +1029,13 @@ class _HistoryPageState extends State<_HistoryPage> {
   }
 
   String _paymentTenant(AppData data, int paymentId) {
-    final allocation = data.allocations
-        .where((a) => a['payment_id'] == paymentId)
-        .firstOrNull;
+    final allocation = data.allocationsForPayment(paymentId).firstOrNull;
     final invoice = allocation == null
         ? null
-        : data.invoice(allocation['invoice_id']);
+        : data.invoice(allocation['invoice_id'] as int);
     return invoice == null
         ? ''
-        : '${data.room(invoice['room_id'])?['name']} · ${data.tenantName(invoice['tenancy_id'])}';
+        : '${data.room(invoice['room_id'] as int)?['name']} · ${data.tenantName(invoice['tenancy_id'] as int)}';
   }
 }
 
@@ -965,72 +1050,78 @@ class _TenancyHistoryPage extends StatelessWidget {
       );
     return Scaffold(
       appBar: AppBar(title: const Text('Tenancy & deposits')),
-      body: ListView(
+      body: ListView.builder(
         padding: const EdgeInsets.all(24),
-        children: [
-          if (records.isEmpty)
-            const EmptyState(
+        itemCount: records.isEmpty ? 1 : records.length,
+        itemBuilder: (context, index) {
+          if (records.isEmpty) {
+            return const EmptyState(
               icon: Icons.people_outline,
               title: 'No tenancy records yet',
               description:
                   'Assign a tenant to a room to start a rental history.',
-            ),
-          ...records.map(
-            (t) => Padding(
-              padding: const EdgeInsets.only(bottom: 16),
-              child: SectionCard(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      data.tenantName(t['id']),
-                      style: Theme.of(context).textTheme.titleLarge,
-                    ),
-                    const SizedBox(height: 6),
-                    Text(
-                      '${data.room(t['room_id'])?['name']} · ${t['move_out'] == null ? 'Current tenant' : 'Moved out'}',
-                    ),
-                    DetailRow('Move-in', dateLabel(t['move_in'])),
-                    DetailRow(
-                      'Move-out',
-                      t['move_out'] == null
-                          ? 'Still occupying'
-                          : dateLabel(t['move_out']),
-                    ),
-                    DetailRow('Agreed monthly rent', money(t['rent_cents'])),
-                    DetailRow(
-                      'Deposit still held',
-                      money(data.depositBalance(t['id'])),
-                      strong: true,
-                    ),
-                    const Divider(),
-                    ...data.deposits
-                        .where((d) => d['tenancy_id'] == t['id'])
-                        .map(
-                          (d) => Padding(
-                            padding: const EdgeInsets.symmetric(vertical: 8),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                DetailRow(
-                                  '${d['kind']} · ${dateLabel(d['date'])}',
-                                  money(d['amount_cents']),
+            );
+          }
+          final t = records[index];
+          final tenancyId = t['id'] as int;
+          return Padding(
+            padding: const EdgeInsets.only(bottom: 16),
+            child: SectionCard(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    data.tenantName(tenancyId),
+                    style: Theme.of(context).textTheme.titleLarge,
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    '${data.room(t['room_id'] as int)?['name']} · ${t['move_out'] == null ? 'Current tenant' : 'Moved out'}',
+                  ),
+                  DetailRow('Move-in', dateLabel(t['move_in'] as String)),
+                  DetailRow(
+                    'Move-out',
+                    t['move_out'] == null
+                        ? 'Still occupying'
+                        : dateLabel(t['move_out'] as String),
+                  ),
+                  DetailRow('Due schedule', dueDayLabel(t['due_day'] as int)),
+                  DetailRow(
+                    'Agreed monthly rent',
+                    money(t['rent_cents'] as int),
+                  ),
+                  DetailRow(
+                    'Deposit still held',
+                    money(data.depositBalance(tenancyId)),
+                    strong: true,
+                  ),
+                  const Divider(),
+                  ...data
+                      .depositsForTenancy(tenancyId)
+                      .map(
+                        (d) => Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 8),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              DetailRow(
+                                '${d['kind']} · ${dateLabel(d['date'] as String)}',
+                                money(d['amount_cents'] as int),
+                              ),
+                              if ((d['notes'] as String).isNotEmpty)
+                                Text(
+                                  d['notes'] as String,
+                                  style: const TextStyle(color: muted),
                                 ),
-                                if ((d['notes'] as String).isNotEmpty)
-                                  Text(
-                                    d['notes'],
-                                    style: const TextStyle(color: muted),
-                                  ),
-                              ],
-                            ),
+                            ],
                           ),
                         ),
-                  ],
-                ),
+                      ),
+                ],
               ),
             ),
-          ),
-        ],
+          );
+        },
       ),
     );
   }
@@ -1070,7 +1161,7 @@ class _AuditPage extends StatelessWidget {
                   ),
                   const SizedBox(height: 6),
                   Text(
-                    '${event['entity']} #${event['entity_id']} · ${formatManilaTimestamp(event['created_at'])}',
+                    '${event['entity']} #${event['entity_id']} · ${formatManilaTimestamp(event['created_at'] as String)}',
                     style: const TextStyle(color: muted, fontSize: 12),
                   ),
                   const SizedBox(height: 8),
