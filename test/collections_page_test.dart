@@ -238,9 +238,13 @@ void main() {
       await tester.pumpAndSettle();
 
       await tester.tap(find.byKey(ValueKey('record-paid-$invoiceId')));
-      await tester.runAsync(
-        () => Future<void>.delayed(const Duration(milliseconds: 120)),
-      );
+      for (var i = 0; i < 40; i++) {
+        await tester.runAsync(
+          () => Future<void>.delayed(const Duration(milliseconds: 50)),
+        );
+        await tester.pump();
+        if (find.byType(CircularProgressIndicator).evaluate().isEmpty) break;
+      }
       await tester.pumpAndSettle();
 
       final updated = (await tester.runAsync(repository.load))!;
@@ -267,4 +271,8 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    await tester.tap(
+    await tester.tap(find.byKey(const ValueKey('top-collections-day')));
+    await tester.pumpAndSettle();
+    expect(find.text('Who is due this week'), findsOneWidget);
+  });
+}

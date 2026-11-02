@@ -288,7 +288,7 @@ class ReminderService {
     for (var day = 0; day < 90; day++) {
       final date = DateTime(today.year, today.month, today.day + day);
       final dateString = isoDate(date);
-      final soon = isoDate(DateTime(date.year, date.month, date.day + 3));
+      final soon = isoDate(date.add(const Duration(days: 3)));
       final overdue = outstanding
           .where((b) => (b['due_date'] as String).compareTo(dateString) < 0)
           .length;
