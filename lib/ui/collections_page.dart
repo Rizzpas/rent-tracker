@@ -223,7 +223,7 @@ class _CollectionsScreenState extends State<CollectionsScreen> {
     ),
     body: SafeArea(
       child: ListView(
-        padding: const EdgeInsets.fromLTRB(20, 8, 20, 32),
+        padding: const EdgeInsets.fromLTRB(20, 8, 20, 88),
         children: [
           Center(
             child: ConstrainedBox(
@@ -315,6 +315,7 @@ class _CollectionsViewState extends State<CollectionsView> {
         messenger?.hideCurrentSnackBar();
         messenger?.showSnackBar(
           SnackBar(
+            persist: false,
             content: Text(
               'Paid ${money(remaining)} ($_method) · ${fresh.tenantName(invoice['tenancy_id'] as int)}',
             ),

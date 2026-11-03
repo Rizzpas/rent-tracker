@@ -250,6 +250,10 @@ void main() {
       final updated = (await tester.runAsync(repository.load))!;
       final paymentId = updated.payments.single['id'] as int;
       expect(updated.payments.single['method'], 'GCash');
+      expect(find.textContaining('Paid ₱4,800.00 (GCash)'), findsOneWidget);
+
+      await tester.pump(const Duration(seconds: 5));
+      await tester.pumpAndSettle();
 
       final receiptBtn = find.byKey(ValueKey('receipt-today-$paymentId'));
       await tester.ensureVisible(receiptBtn);

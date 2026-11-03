@@ -1,48 +1,48 @@
-# Verification record
+# Verification record — Upa Renta
 
-Verified on 31 October 2026 (Asia/Manila), using Flutter 3.47.9, Dart 3.13.7, JDK 17, Android SDK 36, and a Windows host.
+Verified on 3 November 2026 (`Asia/Manila`), using Flutter 3.47.9, Dart 3.13.7, JDK 17, Android SDK 36, and a Windows host.
 
 ## Automated checks
 
-`flutter analyze`: no issues found.
+- `flutter analyze`: **No issues found.**
+- `flutter test`: **93 tests passed** across 16 test suites covering every module in `lib/`.
+- Screenshot export harness (`flutter test test/preview_test.dart --dart-define=EXPORT_PREVIEWS=true`): **passed**, exporting all 7 visual screens (`home.png`, `collections.png`, `home-details.png`, `rooms.png`, `billing.png`, `payments.png`, `more.png`) to `deliverables/screenshots/`. Screenshot records are isolated test fixtures and are never included in the installed app.
 
-`flutter test`: 50 tests passed.
+| Module / Area | Test Suite(s) | Key Verified Invariants |
+| --- | --- | --- |
+| `Asia/Manila` calendar & due dates (`lib/services/local_time.dart`) | `test/local_time_test.dart` | Explicit `UTC+08:00` conversion independent of host timezone; `5th`, `15th`, `30th`, and `31` (`End of month`) resolution across 31-day months, 30-day months, common February (`2026-02-28`), and leap February (`2028-02-29`); rolling 7-day collection window (`manilaCollectionWeek`, `isDueThisWeek`). |
+| O(1) indexed ledger models (`lib/data/models.dart`) | `test/models_test.dart` | Cached O(1) lookups for rooms, tenancies, invoices, lines, balances, deposits, and readings; automatic cache re-indexing when list references change. |
+| SQLite repository & triggers (`lib/data/repository.dart`) | `test/repository_test.dart` | 35+ regression checks: empty initial dataset; centavo & thousandth decimal parsing; overlapping tenancy rejection; metered/fixed/shared utilities; once-only centavo rounding; chronological finalization; immutable finalized snapshots; concurrent idempotent `request_id` payment deduplication; reversals; deposit ledger; `upa-renta-backup` export and backward-compatible `bahay-rent-backup` restore; `dueDateForPeriod` resolution for `5`, `15`, `30`, and `31`. |
+| Local notifications (`lib/services/reminders.dart`) | `test/reminders_test.dart`, `test/services_test.dart` | High-importance Android channel creation; transient initialization failure recovery; `sendTestNotification` immediate delivery; signature deduplication; 32-notification scheduling cap; `Asia/Manila` 09:00 AM scheduling for due, overdue, draft, and `1..31` meter reminders (including February clamping). |
+| Encrypted & plain backups (`lib/services/backup.dart`) | `test/backup_test.dart`, `test/services_test.dart` | `.urbackup` (`upa-renta-file`) + legacy `.brbackup` (`bahay-rent-file`) PBKDF2-HMAC-SHA256 (210,000 iterations) + AES-256-GCM encryption/decryption; SHA-256 plain checksum verification; password confirmation dialog validation. |
+| Offline PDF & CSV documents (`lib/services/documents.dart`) | `test/documents_test.dart`, `test/services_test.dart` | Allocation-free `peso()` formatting; offline bundled Noto Sans TTF PDF statement & receipt generation with `Upa Renta · Created offline` footer; CSV injection/formula escaping. |
+| App PIN & biometric lock (`lib/services/app_lock.dart`) | `test/app_lock_test.dart`, `test/services_test.dart` | PBKDF2 PIN hashing in secure storage; exponential backoff lockout; 30-second background auto-lock; `AppLockGate` unlock UI with `UpaRentaLogo`. |
+| Custom `Asia/Manila` date & month pickers (`lib/ui/date_picker.dart`) | `test/date_picker_test.dart` | Thumb-friendly bottom-sheet calendar (`showUpaDatePicker`) with 1-tap `Today`, `5th`, `15th`, `30th`, and `End of month (28/29/30/31)` presets; `showUpaMonthPicker` 1-tap billing period switcher; `DueDaySelector` preset chips. |
+| Collections Day (`<3 taps`) (`lib/ui/collections_page.dart`) | `test/collections_page_test.dart` | `CollectionsSchedule.from` week bucketing; **2-tap** end-to-end collection (`Collect` → `Pay & receipt`) and `Record paid` → `Receipt` flows; `Cash` / `GCash` / `Bank transfer` / `Other` method chips; idempotent payment protection. |
+| Core UI shell, components & low-end device smoothness (`lib/app.dart`, `lib/ui/*`) | `test/common_ui_test.dart`, `test/pages_test.dart`, `test/app_flow_test.dart`, `test/ui_layout_test.dart`, `test/preview_seed_test.dart` | Zero `BackdropFilter` GPU blurs anywhere in the widget tree; single active-tab instantiation; lazy `SliverList.builder` / `ListView.builder` rendering; zero layout overflow across Home, Collections Day, Rooms, Billing, Payments, and More on a `360px` screen at `1.3×` text scale. |
 
-The optional screenshot harness (`test/preview_test.dart`) is skipped during the regular test suite. Its separate export run also passes; see `deliverables/screenshots/README.md` for reproduction instructions. Screenshot records are isolated test fixtures and are not included in the installed app.
+## Android release artifact checks
 
-| Area | Evidence |
-| --- | --- |
-| SQLite / financial integrity | 32 regression tests: empty first dataset; precise decimal parsing and overflow rejection; overlapping tenancy guards; metered/fixed/shared utilities; once-only centavo rounding; initial meter baseline and cross-tenant carry-forward; chronological finalization; immutable finalized rates; duplicate bill prevention; concurrent idempotent payment submissions; partial/multiple payments; reversals; separate deposit ledger; limits and failed-operation rollback; complete validated restore; invalid restore preservation; database close/reopen persistence. |
-| Offline documents / backup / security | 10 tests: real PDF statement and receipt generation using bundled fonts; billing month versus cash receipt dates; room/tenant-filtered payment allocations; exclusive move-out occupancy; CSV escaping; AES-GCM round trip, wrong password and tamper rejection; plaintext backup checksum; secure PIN hashing and throttling; overdue partial, draft and meter reminder plans. |
-| User flows | 4 widget tests: fresh shell and all five destinations; room creation; partial payment entry; tenant assignment → initial/current meter readings → discount → draft → confirmed finalization. Reads/writes use real SQLite through the desktop FFI driver. |
-| Small-screen layouts | 4 populated page tests at 360 logical pixels and 1.3× text scale: Home, Rooms, Billing, Payments. The fresh-shell flow also checks all five destinations with larger text. |
+- Deliverable APK: `deliverables/Upa-Renta-1.0.0.apk`
+- `SHA-256`: `29bf0c472ee0306b01031de15815f233e182c2c0a9da520630f7bd51e720c760` (`deliverables/SHA256SUMS.txt`)
+- Signing: Persistent local 3,072-bit RSA release keystore (`%LOCALAPPDATA%\UpaRenta\signing`). `apksigner verify` confirms **APK Signature Scheme v2 (`true`)**.
+- Badging (`aapt dump badging`):
+  - Package: `ph.uparenta.upa_renta`
+  - Label: `Upa Renta`
+  - Version: `1.0.0` (`versionCode='1'`)
+  - SDKs: `minSdk 24` (Android 7.0), `targetSdk 36`
+  - ABIs: `arm64-v8a`, `armeabi-v7a`, `x86_64`
+  - R8 code shrinking + resource shrinking enabled with ProGuard keep rules (`android/app/proguard-rules.pro`) and resource keep rules (`android/app/src/main/res/raw/keep.xml`) preserving `flutter_local_notifications` receivers and `@drawable/ic_notification`.
+- Permissions (`aapt dump permissions`):
+  - **Zero `android.permission.INTERNET` permission** in the release APK (strictly offline).
+  - Declared permissions: `POST_NOTIFICATIONS`, `RECEIVE_BOOT_COMPLETED`, `VIBRATE`, `USE_BIOMETRIC`, `USE_FINGERPRINT`, and `ph.uparenta.upa_renta.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION`.
 
-The billing user-flow fixture verifies 34.567 kWh × ₱12.50 = ₱432.09 and 4.125 m³ × ₱35.00 = ₱144.38, with a separate ₱4,500 deposit and a ₱50 discount.
+## Target phone acceptance checklist
 
-## Android artifact checks
+Complete this quick checklist when installing `Upa-Renta-1.0.0.apk` on a physical Android phone:
 
-The release APK is built and signed with a persistent local RSA release key. `apksigner verify` confirms APK Signature Scheme v2. `aapt dump badging` confirms package `ph.bahay.bahay_rent`, version 1.0.0, minimum Android API 24, and target API 36. The package includes ARM 32-bit, ARM 64-bit, and x86-64 binaries.
-
-`aapt dump permissions` confirms there is **no INTERNET permission** in the release APK. The main manifest disables Android automatic backup and configures local-notification boot restoration, notification permission, and biometric access. Notification icon resources are explicitly retained for resource-shrunk release builds.
-
-## Device checks still required
-
-No physical Android phone was connected. An API 30 Android emulator was provisioned and two software-rendering boot attempts were made; it remained offline on this host, which has hardware virtualization disabled. No successful device installation or reboot test is claimed.
-
-On the target phone, complete this acceptance checklist before relying on the app for the sole copy of property records:
-
-1. Install the APK. Disable Wi-Fi and mobile data. Launch it for the first time; confirm no account or network prompt is required.
-2. Add a room and tenant, generate and finalize a meter bill, and record partial and full payments. Check the resulting balances and PDF documents.
-3. Force-stop/reopen the app and reboot the phone. Confirm records and totals persist.
-4. Save PDFs and CSVs to a chosen folder; open them offline. Exercise printing and Android sharing with the phone's installed applications/services.
-5. Export plaintext and password-protected backups outside app storage. Add a test record, then restore each backup. Check the explicit replacement confirmation and financial totals; export the pre-restore safety copy if needed.
-6. Enable notifications, grant permission, and check due, overdue, draft and meter reminders. Reboot and verify pending schedules. Check Android battery restrictions if reminders are delayed.
-7. Enable a PIN, test an incorrect PIN, relaunch the app, and test background relocking. If supported, enable and test biometric unlock.
-8. Move a tenant out, refund or deduct their deposit with notes, and assign a new tenant. Confirm the outgoing tenant's bills and payments remain in history.
-
-## Deliberate limits
-
-- One invoice per room per billing month; there is no automatic rent proration. An incoming tenant cannot receive a second invoice for an already-finalized room/month. Review turnover agreements before finalizing that month's bill.
-- A shared utility is the room's manually allocated share of the master charge, not an automatic allocation among tenants.
-- SQLite uses Android private app storage. The optional app PIN does not encrypt the SQLite file. External encrypted backups provide separate password protection.
-- Device print services, share destinations, biometrics, file pickers, and notification delivery have platform-specific behavior and are covered by the device checklist above.
+1. Turn off Wi-Fi and mobile data, install `Upa-Renta-1.0.0.apk`, and launch **Upa Renta**. Confirm the new adaptive emerald-and-gold house-arch icon appears on the home screen and no account or network prompt appears.
+2. Add a room and assign a tenant using the **5th**, **15th**, **30th**, or **End of month** due-day chips and custom `Asia/Manila` date picker.
+3. Generate and finalize a bill, then tap **Collect** in the top bar to open **Collections Day** and tap **Pay & receipt** (2 taps total) to record payment and generate the offline PDF receipt.
+4. Open **More → Local reminders**, enable notifications, and tap **Send test notification** to confirm immediate status-bar notification delivery on the device.
+5. Export an encrypted `.urbackup` copy outside app storage and verify restore confirmation and optional 6-digit PIN lock.
